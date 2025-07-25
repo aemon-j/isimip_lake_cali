@@ -17,12 +17,12 @@ thm <- theme_pubr(base_size = 17) + grids()
 # list files
 files <- list.files(file.path("..", "raw_data"), recursive = TRUE) |>
   data.frame() |> setNames("file") |> filter(file != "README.md") |>
-  filter(!grepl(pattern = "\\.RDS", x = file))
+  filter(!grepl(pattern = "lake_characteristics.*", x = file))
 
 # read in files and combine to a single data.frame
 dat <- lapply(files$file, function(f) {
   read.csv(file.path("..", "raw_data", f), header = TRUE)}) |>
-  melt(id.vars = 1:8) |> select(-L1)
+  reshape2::melt(id.vars = 1:8) |> select(-L1)
 
 
 meta <- read.csv("../raw_data/lake_characteristics.csv")
@@ -67,7 +67,35 @@ dat_metr <- dat |> pivot_wider(names_from = cali, values_from = value) |>
   reframe(R = cor(calibrated, uncalibrated),
           bias = mean(uncalibrated - calibrated, na.rm = TRUE),
           var = var(uncalibrated - calibrated, na.rm = TRUE)) |>
-  pivot_longer(5:8, names_to = "metr")
+  pivot_longer(5:7, names_to = "metr")
+
+
+## variance decomposition
+var_frac <- function(value, model, gcm, scenario, lake) {
+  an <- anova(lm(value ~ model * gcm * scenario * lake))
+  totsst <- sum(an$`Sum Sq`)
+  sep <- an$`Sum Sq`
+  sep <- c(sep[1:4], sum(sep[5:length(sep)]))/totsst
+  return(sep)
+}
+tst <- dat |> filter(name == "surftemp_mean") |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  group_by(model, scenario, lake, gcm, name) |>
+  reframe(R = cor(calibrated, uncalibrated),
+          bias = mean(uncalibrated - calibrated, na.rm = TRUE),
+          var = var(uncalibrated - calibrated, na.rm = TRUE)) |>
+  pivot_longer(6:8, names_to = "metr") |>
+  mutate(model = as.factor(model),
+         gcm = as.factor(gcm),
+         scenario = as.factor(scenario),
+         lake = as.factor(lake)) |>
+  group_by(metr) |>
+  reframe(f_model = var_frac(value, model, gcm, scenario, lake)[1],
+          f_gcm = var_frac(value, model, gcm, scenario, lake)[2],
+          f_scen = var_frac(value, model, gcm, scenario, lake)[3],
+          f_lake = var_frac(value, model, gcm, scenario, lake)[4],
+          f_inter = var_frac(value, model, gcm, scenario, lake)[5])
+
 
 ##-------- first plots ----------------------------------##
 
