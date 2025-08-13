@@ -53,26 +53,26 @@ meta <- read.csv("../raw_data/lake_characteristics.csv") |>
 
 ## trends
 
-dat_trend <- dat |> pivot_wider() |> na.omit() |>
+dat_trend <- dat |> pivot_wider() |>
   group_by(lake, model, cali, scenario) |>
   reframe(sl_surftemp_mean = coefficients(lm(surftemp_mean ~ year))[2],
           ic_surftemp_mean = coefficients(lm(surftemp_mean ~ year))[1],
           m_surftemp_mean = predict(lm(surftemp_mean ~ year), data.frame(year = median(year))), # mean value at middle of time period
-          sl_bottemp_mean = coefficients(lm(bottemp_mean ~ year))[2],
-          ic_bottemp_mean = coefficients(lm(bottemp_mean ~ year))[1],
-          m_t_bottemp_mean = predict(lm(bottemp_mean ~ year), data.frame(year = median(year))), # mean value at middle of time period
+          sl_bottemp_mean = tryCatch(coefficients(lm(bottemp_mean ~ year))[2], error = function(e) NA),
+          ic_bottemp_mean = tryCatch(coefficients(lm(bottemp_mean ~ year))[1], error = function(e) NA),
+          m_t_bottemp_mean = tryCatch(predict(lm(bottemp_mean ~ year), data.frame(year = median(year))), error = function(e) NA), # mean value at middle of time period
           sl_strat_mean = coefficients(lm(strat_sum ~ year))[2],
           ic_strat_mean = coefficients(lm(strat_sum ~ year))[1],
           m_strat_mean = predict(lm(strat_sum ~ year), data.frame(year = median(year))), # mean value at middle of time period
-          sl_latentheatf_mean = coefficients(lm(latentheatf_mean ~ year))[2],
-          ic_latentheatf_mean = coefficients(lm(latentheatf_mean ~ year))[1],
-          m_latentheatf_mean = predict(lm(latentheatf_mean ~ year), data.frame(year = median(year))),
+          sl_latentheatf_mean = tryCatch(coefficients(lm(latentheatf_mean ~ year))[2], error = function(e) NA),
+          ic_latentheatf_mean = tryCatch(coefficients(lm(latentheatf_mean ~ year))[1], error = function(e) NA),
+          m_latentheatf_mean = tryCatch(predict(lm(latentheatf_mean ~ year), data.frame(year = median(year))), error = function(e) NA),
           sl_sensheatf_mean = coefficients(lm(sensheatf_mean ~ year))[2],
           ic_sensheatf_mean = coefficients(lm(sensheatf_mean ~ year))[1],
           m_sensheatf_mean = predict(lm(sensheatf_mean ~ year), data.frame(year = median(year))),
-          sl_heat_mean = coefficients(lm(heat_mean ~ year))[2],
-          ic_heat_mean = coefficients(lm(heat_mean ~ year))[1],
-          m_heat_mean = predict(lm(heat_mean ~ year), data.frame(year = median(year))))
+          sl_heat_mean = tryCatch(coefficients(lm(heat_mean ~ year))[2], error = function(e) NA),
+          ic_heat_mean = tryCatch(coefficients(lm(heat_mean ~ year))[1], error = function(e) NA),
+          m_heat_mean = tryCatch(predict(lm(heat_mean ~ year), data.frame(year = median(year))), error = function(e) NA))
 
 
 dat_trends_diff <- dat_trend |> pivot_longer(cols = 5:ncol(dat_trend)) |>
@@ -115,7 +115,6 @@ var_frac <- function(value, model, gcm, scenario, lake) {
 #   filter(name %in% c("surftemp_mean", "bottemp_mean",
 #                      "sensheatf_mean", "latentheatf_mean",
 #                      "strat_sum", "heat_mean")) |>
-#   na.omit() |>
 #   pivot_wider(names_from = cali, values_from = value) |>
 #   group_by(model, scenario, lake, gcm, name) |>
 #   reframe(R = cor(calibrated, uncalibrated),
@@ -129,7 +128,7 @@ var_frac <- function(value, model, gcm, scenario, lake) {
 #   reframe(fracs = var_frac(value, model, gcm, scenario, lake)) |>
 #   unpack(fracs)
 # 
-# saveRDS(frac_temp_mean, "var_decomp.RDS")
+# saveRDS(frac_temp_mean, file.path("..", "derived_data", "var_decomp.RDS"))
 
 # load pre-calculated variance decomposition
 var_dec <- readRDS(file.path("..", "derived_data", "var_decomp.RDS"))
