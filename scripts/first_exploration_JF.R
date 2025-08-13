@@ -18,6 +18,7 @@ thm <- theme_pubr(base_size = 17) + grids()
 # list files
 files <- list.files(file.path("..", "raw_data"), recursive = TRUE) |>
   data.frame() |> setNames("file") |> filter(file != "README.md") |>
+  filter(!str_detect(file, "desktop.ini")) |>
   filter(!grepl(pattern = "lake_characteristics.*", x = file))
 
 # read in files and combine to a single data.frame
@@ -52,7 +53,7 @@ meta <- read.csv("../raw_data/lake_characteristics.csv") |>
 
 ## trends
 
-dat_trend <- dat |> pivot_wider() |>
+dat_trend <- dat |> pivot_wider() |> na.omit() |>
   group_by(lake, model, cali, scenario) |>
   reframe(sl_surftemp_mean = coefficients(lm(surftemp_mean ~ year))[2],
           ic_surftemp_mean = coefficients(lm(surftemp_mean ~ year))[1],
@@ -114,6 +115,7 @@ var_frac <- function(value, model, gcm, scenario, lake) {
 #   filter(name %in% c("surftemp_mean", "bottemp_mean",
 #                      "sensheatf_mean", "latentheatf_mean",
 #                      "strat_sum", "heat_mean")) |>
+#   na.omit() |>
 #   pivot_wider(names_from = cali, values_from = value) |>
 #   group_by(model, scenario, lake, gcm, name) |>
 #   reframe(R = cor(calibrated, uncalibrated),
@@ -237,7 +239,8 @@ ggsave(file.path("..", "Output", "ts_all_vars.png"), width = 19, height = 17)
 dat |> filter(name %in% c("surftemp_mean", "bottemp_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  ggplot() + geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster)) +
+  ggplot() +
+  geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
   facet_grid(scenario~name, scales = "free") +
   scale_color_viridis_d() + thm
@@ -248,7 +251,8 @@ ggsave(file.path("..", "Output", "scatter_temp.png"), width = 13, height = 13)
 dat |> filter(name %in% c("sensheatf_mean", "latentheatf_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  ggplot() + geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster)) +
+  ggplot() +
+  geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
   facet_wrap(scenario~name, scales = "free") +
   scale_color_viridis_d() + thm
@@ -259,7 +263,8 @@ ggsave(file.path("..", "Output", "scatter_heatf.png"), width = 13, height = 13)
 dat |> filter(name %in% c("strat_sum", "heat_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  ggplot() + geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster)) +
+  ggplot() +
+  geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
   facet_wrap(scenario~name, scales = "free") +
   scale_color_viridis_d() + thm
