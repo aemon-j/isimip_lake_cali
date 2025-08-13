@@ -120,7 +120,7 @@ for(i in the_folders){
       }
     }
     
-    the_files = list.files(file.path(folder_box, i, j))
+    the_files = list.files(file.path(folder_box, i, j), pattern = "\\.csv")
     
     # Check: are there the right number of output files?
     if(length(the_files) != length(all_gcms) * 2){
