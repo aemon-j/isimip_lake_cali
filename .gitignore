@@ -48,6 +48,9 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# Folders to ignore in isimip project
+# Folders to ignore in isimip project but don't ignore lake characteristic files
 raw_data/
+!raw_data/lake_characteristics.csv
+!raw_data/lake_characteristics_description.csv
+!raw_data/performance/
 Output/
