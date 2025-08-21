@@ -19,7 +19,8 @@ thm <- theme_pubr(base_size = 17) + grids()
 files <- list.files(file.path("..", "raw_data"), recursive = TRUE) |>
   data.frame() |> setNames("file") |> filter(file != "README.md") |>
   filter(!str_detect(file, "desktop.ini")) |>
-  filter(!grepl(pattern = "lake_characteristics.*", x = file))
+  filter(!grepl(pattern = "lake_characteristics.*", x = file)) |>
+  filter(!grepl(pattern = "performance", x = file))
 
 # read in files and combine to a single data.frame
 dat <- lapply(files$file, function(f) {
