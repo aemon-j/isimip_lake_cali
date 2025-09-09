@@ -185,7 +185,7 @@ for(i in names(vars)){
   
   df_plot4 = merge(df_plot_wide1, df_perf_rmse, by = c("model", "lake"))
   df_plot4[, meandiff := abs(meandiff)]
-  df_plot4 = df_plot4[scenario == "historical" & gcm == "gfdl-esm4"] # No need to plot all GCMs and scenarios
+  df_plot4 = df_plot4[scenario == "ssp585"] # scenario == "historical" & gcm == "gfdl-esm4"
   p4 = ggplot(df_plot4) +
     geom_point(aes(diff_perf, meandiff)) +
     facet_wrap(~ model) +
