@@ -37,6 +37,9 @@ dat <- dat |> mutate(scenario = case_match(scenario,
                            levels = c("Picontrol", "Historical", "SSP1-2.6",
                                       "SSP3-7.0", "SSP5-8.5")))
 
+# log transform the mean internal thermal heat
+dat <- dat |> mutate(value = ifelse(name == "heat_mean", log10(value), value))
+
 meta <- read.csv("../raw_data/lake_characteristics.csv") |>
   mutate(kmcluster = factor(kmcluster,
                             levels = c("Deep lakes",
@@ -110,9 +113,46 @@ var_frac <- function(value, model, gcm, scenario, lake) {
   return(sep)
 }
 
+## variance decomposition without scenario
+var_frac_2 <- function(value, model, gcm, lake) {
+  dat <- data.frame(model = model, gcm = gcm,
+                    lake = lake,
+                    value = value) 
+  an <- anova(lm(value ~ model * gcm * lake, data = dat))
+  tmp <- print(an)
+  totsst <- sum(an$`Sum Sq`)
+  sep <- an$`Sum Sq`
+  #sep <- c(sep[1:4], sum(sep[5:length(sep)]))/totsst
+  #sep <- data.frame(group = c(rownames(tmp)[1:4], "interactions"),
+  #                  frac = sep)
+  sep <- sep/totsst
+  sep <- data.frame(group = c(rownames(tmp)),
+                    frac = sep)
+  return(sep)
+}
+
+## variance decomposition without scenario but with calibnrated
+var_frac_3 <- function(value, model, gcm, lake, cali) {
+  dat <- data.frame(model = model, gcm = gcm,
+                    lake = lake, cali = cali,
+                    value = value) 
+  an <- anova(lm(value ~ model * gcm * lake * cali, data = dat))
+  tmp <- print(an)
+  totsst <- sum(an$`Sum Sq`)
+  sep <- an$`Sum Sq`
+  #sep <- c(sep[1:4], sum(sep[5:length(sep)]))/totsst
+  #sep <- data.frame(group = c(rownames(tmp)[1:4], "interactions"),
+  #                  frac = sep)
+  sep <- sep/totsst
+  sep <- data.frame(group = c(rownames(tmp)),
+                    frac = sep)
+  return(sep)
+}
+
 # # this is very slow due to the lm with all interactions :(
 # # so I saved the outccome in a RDS file and commented the part to calculate it out
-# frac_temp_mean <- dat |>
+# # variance partitioning for the R and bias of cali and uncali
+# frac_temp_diff <- dat |>
 #   filter(name %in% c("surftemp_mean", "bottemp_mean",
 #                      "sensheatf_mean", "latentheatf_mean",
 #                      "strat_sum", "heat_mean")) |>
@@ -129,13 +169,44 @@ var_frac <- function(value, model, gcm, scenario, lake) {
 #   reframe(fracs = var_frac(value, model, gcm, scenario, lake)) |>
 #   unpack(fracs)
 # 
+# saveRDS(frac_temp_diff, file.path("..", "derived_data", "var_decomp_diff.RDS"))
+#
+# # variance partitioning for each year for each variable for cali and uncali seperated
+# frac_temp_mean <- dat |>
+#   filter(name %in% c("surftemp_mean", "bottemp_mean",
+#                      "sensheatf_mean", "latentheatf_mean",
+#                      "strat_sum", "heat_mean")) |>
+#   mutate(model = as.factor(model),
+#          gcm = as.factor(gcm),
+#          lake = as.factor(lake)) |>
+#   group_by(name, cali, year, scenario) |>
+#   reframe(fracs = var_frac_2(value, model, gcm, lake)) |>
+#   unpack(fracs)
+# 
 # saveRDS(frac_temp_mean, file.path("..", "derived_data", "var_decomp.RDS"))
 
+# vaiance partitioning for each year and variable with calibration as a factor
+frac_temp_mean_2 <- dat |>
+  filter(name %in% c("surftemp_mean", "bottemp_mean",
+                     "sensheatf_mean", "latentheatf_mean",
+                     "strat_sum", "heat_mean")) |>
+  mutate(model = as.factor(model),
+         gcm = as.factor(gcm),
+         lake = as.factor(lake),
+         cali = as.factor(cali)) |>
+  group_by(name, year, scenario) |>
+  reframe(fracs = var_frac_3(value, model, gcm, lake, cali)) |>
+  unpack(fracs)
+
+saveRDS(frac_temp_mean_2, file.path("..", "derived_data", "var_decomp_2.RDS"))
+
 # load pre-calculated variance decomposition
+var_dec_diff <- readRDS(file.path("..", "derived_data", "var_decomp_diff.RDS"))
 var_dec <- readRDS(file.path("..", "derived_data", "var_decomp.RDS"))
+#var_dec_2 <- readRDS(file.path("..", "derived_data", "var_decomp_2.RDS"))
 
 
-##-------- first plots just plot everything (this is messy) -----------------------##
+##------------------- first plots just plot everything (this is messy) -----------------------
 
 ## temporat developement of difference
 for(v in unique(dat$name)) {
@@ -214,7 +285,7 @@ for(v in unique(dat_trends_diff$name)) {
 ##----------- better plots ----------------------------------
 
 ## over time
-dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
+p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
                           "sensheatf_mean", "latentheatf_mean",
                           "strat_sum", "heat_mean")) |>
   group_by(year, scenario, cali, name) |>
@@ -231,65 +302,66 @@ dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
   scale_fill_viridis_d() + scale_color_viridis_d() + thm +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-ggsave(file.path("..", "Output", "ts_all_vars.png"), width = 19, height = 17)
+ggsave(file.path("..", "Output", "ts_all_vars.png"), p, width = 19, height = 17)
 
 ## scatter plots
 
 # just for mean surf & bot temp
-dat |> filter(name %in% c("surftemp_mean", "bottemp_mean")) |>
+p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() +
-  geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster), alpha = 0.5) +
+  geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_grid(scenario~name, scales = "free") +
+  facet_grid(kmcluster~name, scales = "free") +
   scale_color_viridis_d() + thm
 
-ggsave(file.path("..", "Output", "scatter_temp.png"), width = 13, height = 13)
+ggsave(file.path("..", "Output", "scatter_temp.png"), p, width = 13, height = 13)
 
 # just for sensible and latent heat flux
-dat |> filter(name %in% c("sensheatf_mean", "latentheatf_mean")) |>
+p <- dat |> filter(name %in% c("sensheatf_mean", "latentheatf_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() +
-  geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster), alpha = 0.5) +
+  geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_wrap(scenario~name, scales = "free") +
+  facet_wrap(kmcluster~name, scales = "free") +
   scale_color_viridis_d() + thm
 
-ggsave(file.path("..", "Output", "scatter_heatf.png"), width = 13, height = 13)
+ggsave(file.path("..", "Output", "scatter_heatf.png"), p, width = 13, height = 13)
 
 # just for total heat and strat
-dat |> filter(name %in% c("strat_sum", "heat_mean")) |>
+p <- dat |> filter(name %in% c("strat_sum", "heat_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() +
-  geom_point(aes(x = calibrated, y = uncalibrated, col = kmcluster), alpha = 0.5) +
+  geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_wrap(scenario~name, scales = "free") +
+  facet_wrap(kmcluster~name, scales = "free") +
   scale_color_viridis_d() + thm
 
-ggsave(file.path("..", "Output", "scatter_heat_strat.png"), width = 13, height = 13)
+ggsave(file.path("..", "Output", "scatter_heat_strat.png"), p, width = 13, height = 13)
 
 ## variance of the variable by lake type
-dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
+p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
                           "sensheatf_mean", "latentheatf_mean",
                           "strat_sum", "heat_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  group_by(year, scenario, cali, name, kmcluster) |>
+  group_by(year, model, scenario, cali, name, kmcluster) |>
   reframe(range = abs(diff(range(value, na.rm = TRUE))),
           var = var(value, na.rm = TRUE),
           sd = sqrt(var)) |>
+  pivot_wider(names_from = cali, values_from = c(var, range, sd)) |>
   ggplot() +
-  geom_line(aes(x = year, y = sd, col = kmcluster, lty = cali), lwd = 1.23) +
-  facet_grid(name~scenario, scales = "free") +
+  geom_point(aes(x = year, y = sd_calibrated - sd_uncalibrated, col = model), lwd = 1.23) +
+  facet_grid(name~kmcluster, scales = "free") +
   scale_fill_viridis_d() + scale_color_viridis_d() + thm +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-ggsave(file.path("..", "Output", "var_all_vars.png"), width = 19, height = 17)
+ggsave(file.path("..", "Output", "var_all_vars.png"), p, width = 19, height = 17)
 
 ## R and bias for all
-dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
+p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
                           "sensheatf_mean", "latentheatf_mean",
                           "strat_sum", "heat_mean")) |>
     pivot_wider(names_from = cali, values_from = value) |>
@@ -298,28 +370,28 @@ dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
             bias = mean(uncalibrated - calibrated, na.rm = TRUE)) |>
     pivot_longer(6:7, names_to = "metr") |> ggplot() +
   geom_hline(aes(yintercept = 0), col = "grey42", lty = "dashed") +
-  geom_violin(aes(x = name, y = value, fill = name)) +
+  geom_violin(aes(x = name, y = value, fill = model)) +
   facet_wrap(metr~name, scales = "free") + thm +
   scale_fill_viridis_d(option = "H")
 
-ggsave(file.path("..", "Output", "R_bias_all.png"), width = 15, height = 13)
+ggsave(file.path("..", "Output", "R_bias_all.png"), p, width = 15, height = 13)
 
 ## variance decomposition
-var_dec$group <- factor(var_dec$group,
-                        levels = unique(var_dec$group),
-                        labels = unique(var_dec$group))
+var_dec_diff$group <- factor(var_dec_diff$group,
+                             levels = unique(var_dec_diff$group),
+                             labels = unique(var_dec_diff$group))
 
 cols <- c(viridis::plasma(4), colorspace::desaturate(viridis::mako(12), 0.2))
-var_dec |> mutate(interaction = grepl(":", group)) |>
+p <- var_dec_diff |> mutate(interaction = grepl(":", group)) |>
   ggplot() + geom_col(aes(x = metr, y = frac, fill = group)) +
   facet_grid(.~name) + thm + scale_fill_manual("factor", values = cols)
 
-ggsave(file.path("..", "Output", "var_Decomp_R_bias.png"), width = 15, height = 13)
+ggsave(file.path("..", "Output", "var_Decomp_R_bias.png"), p, width = 15, height = 13)
 
 ## dist of slope difference
 
 # trend just for surf and bot temp
-dat_trends_diff |> filter(name %in% c("sl_surftemp_mean", "sl_bottemp_mean")) |>
+p <- dat_trends_diff |> filter(name %in% c("sl_surftemp_mean", "sl_bottemp_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
   facet_grid(scenario ~ name) +
@@ -329,10 +401,10 @@ dat_trends_diff |> filter(name %in% c("sl_surftemp_mean", "sl_bottemp_mean")) |>
   thm + theme(axis.text.y = element_blank(),
               axis.ticks.y = element_blank())
 
-ggsave(file.path("..", "Output", "dist_slope_diff_temp.png"), width = 15, height = 13)
+ggsave(file.path("..", "Output", "dist_slope_diff_temp.png"), p, width = 15, height = 13)
 
 # trend just for sensible and latent heat flux
-dat_trends_diff |> filter(name %in% c("sl_sensheatf_mean", "sl_latentheatf_mean")) |>
+p <- dat_trends_diff |> filter(name %in% c("sl_sensheatf_mean", "sl_latentheatf_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
   facet_grid(scenario ~ name) +
@@ -342,11 +414,11 @@ dat_trends_diff |> filter(name %in% c("sl_sensheatf_mean", "sl_latentheatf_mean"
   thm + theme(axis.text.y = element_blank(),
               axis.ticks.y = element_blank())
 
-ggsave(file.path("..", "Output", "dist_slope_diff_hflux.png"), width = 15, height = 13)
+ggsave(file.path("..", "Output", "dist_slope_diff_hflux.png"), p, width = 15, height = 13)
 
 
 # trend just for strat dur and total heat
-dat_trends_diff |> filter(name %in% c("sl_strat_mean", "sl_heat_mean")) |>
+p <- dat_trends_diff |> filter(name %in% c("sl_strat_mean", "sl_heat_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
   facet_grid(scenario ~ name, scales = "free") +
@@ -355,4 +427,4 @@ dat_trends_diff |> filter(name %in% c("sl_strat_mean", "sl_heat_mean")) |>
   scale_fill_viridis_d("Lake type") + ylab("") +
   thm + theme(axis.text.y = element_blank(),
               axis.ticks.y = element_blank())
-ggsave(file.path("..", "Output", "dist_slope_diff_strat_heat.png"), width = 15, height = 13)
+ggsave(file.path("..", "Output", "dist_slope_diff_strat_heat.png"), p, width = 15, height = 13)
