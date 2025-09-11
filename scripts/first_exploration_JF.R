@@ -38,7 +38,9 @@ dat <- dat |> mutate(scenario = case_match(scenario,
                                       "SSP3-7.0", "SSP5-8.5")))
 
 # log transform the mean internal thermal heat
-dat <- dat |> mutate(value = ifelse(name == "heat_mean", log10(value), value))
+dat <- dat |> mutate(value = ifelse(grepl("air2water", model ) & name == "heat_mean",
+                                    NA, value)) |>
+  mutate(value = ifelse(name == "heat_mean", log10(value), value))
 
 meta <- read.csv("../raw_data/lake_characteristics.csv") |>
   mutate(kmcluster = factor(kmcluster,
@@ -58,7 +60,7 @@ meta <- read.csv("../raw_data/lake_characteristics.csv") |>
 ## trends
 
 dat_trend <- dat |> pivot_wider() |>
-  group_by(lake, model, cali, scenario) |>
+  group_by(lake, model, gcm, cali, scenario) |>
   reframe(sl_surftemp_mean = coefficients(lm(surftemp_mean ~ year))[2],
           ic_surftemp_mean = coefficients(lm(surftemp_mean ~ year))[1],
           m_surftemp_mean = predict(lm(surftemp_mean ~ year), data.frame(year = median(year))), # mean value at middle of time period
@@ -74,14 +76,14 @@ dat_trend <- dat |> pivot_wider() |>
           sl_sensheatf_mean = coefficients(lm(sensheatf_mean ~ year))[2],
           ic_sensheatf_mean = coefficients(lm(sensheatf_mean ~ year))[1],
           m_sensheatf_mean = predict(lm(sensheatf_mean ~ year), data.frame(year = median(year))),
-          sl_heat_mean = tryCatch(coefficients(lm(heat_mean ~ year))[2], error = function(e) NA),
-          ic_heat_mean = tryCatch(coefficients(lm(heat_mean ~ year))[1], error = function(e) NA),
-          m_heat_mean = tryCatch(predict(lm(heat_mean ~ year), data.frame(year = median(year))), error = function(e) NA))
+          sl_ice_mean = tryCatch(coefficients(lm(ice_sum ~ year))[2], error = function(e) NA),
+          ic_ice_mean = tryCatch(coefficients(lm(ice_sum ~ year))[1], error = function(e) NA),
+          m_ice_mean = tryCatch(predict(lm(ice_sum ~ year), data.frame(year = median(year))), error = function(e) NA))
 
 
-dat_trends_diff <- dat_trend |> pivot_longer(cols = 5:ncol(dat_trend)) |>
+dat_trends_diff <- dat_trend |> pivot_longer(cols = 6:ncol(dat_trend)) |>
   pivot_wider(names_from = cali, values_from = value,
-              id_cols = c(model, scenario, lake, name)) |>
+              id_cols = c(model, scenario, lake, gcm, name)) |>
   mutate(diff = `uncalibrated` - calibrated) |>
   select(- calibrated, -`uncalibrated`)
 
@@ -149,47 +151,65 @@ var_frac_3 <- function(value, model, gcm, lake, cali) {
   return(sep)
 }
 
-# # this is very slow due to the lm with all interactions :(
-# # so I saved the outccome in a RDS file and commented the part to calculate it out
-# # variance partitioning for the R and bias of cali and uncali
-# frac_temp_diff <- dat |>
-#   filter(name %in% c("surftemp_mean", "bottemp_mean",
-#                      "sensheatf_mean", "latentheatf_mean",
-#                      "strat_sum", "heat_mean")) |>
-#   pivot_wider(names_from = cali, values_from = value) |>
-#   group_by(model, scenario, lake, gcm, name) |>
-#   reframe(R = cor(calibrated, uncalibrated),
-#           bias = mean(uncalibrated - calibrated, na.rm = TRUE)) |>
-#   pivot_longer(6:7, names_to = "metr") |>
-#   mutate(model = as.factor(model),
-#          gcm = as.factor(gcm),
-#          scenario = as.factor(scenario),
-#          lake = as.factor(lake)) |>
-#   group_by(name, metr) |>
-#   reframe(fracs = var_frac(value, model, gcm, scenario, lake)) |>
-#   unpack(fracs)
-# 
-# saveRDS(frac_temp_diff, file.path("..", "derived_data", "var_decomp_diff.RDS"))
-#
-# # variance partitioning for each year for each variable for cali and uncali seperated
-# frac_temp_mean <- dat |>
-#   filter(name %in% c("surftemp_mean", "bottemp_mean",
-#                      "sensheatf_mean", "latentheatf_mean",
-#                      "strat_sum", "heat_mean")) |>
-#   mutate(model = as.factor(model),
-#          gcm = as.factor(gcm),
-#          lake = as.factor(lake)) |>
-#   group_by(name, cali, year, scenario) |>
-#   reframe(fracs = var_frac_2(value, model, gcm, lake)) |>
-#   unpack(fracs)
-# 
-# saveRDS(frac_temp_mean, file.path("..", "derived_data", "var_decomp.RDS"))
+## variance decomposition of slope of linear model
+var_frac_lm <- function(value, model, gcm, lake, scenario, cali) {
+  dat <- data.frame(model = model, gcm = gcm,
+                    lake = lake, cali = cali,
+                    scenario = scenario, value = value) 
+  an <- anova(lm(value ~ model * gcm * lake * scenario * cali, data = dat))
+  tmp <- print(an)
+  totsst <- sum(an$`Sum Sq`)
+  sep <- an$`Sum Sq`
+  #sep <- c(sep[1:4], sum(sep[5:length(sep)]))/totsst
+  #sep <- data.frame(group = c(rownames(tmp)[1:4], "interactions"),
+  #                  frac = sep)
+  sep <- sep/totsst
+  sep <- data.frame(group = c(rownames(tmp)),
+                    frac = sep)
+  return(sep)
+}
+
+# this is very slow due to the lm with all interactions :(
+# so I saved the outccome in a RDS file and commented the part to calculate it out
+# variance partitioning for the R and bias of cali and uncali
+frac_temp_diff <- dat |>
+  filter(name %in% c("surftemp_mean", "bottemp_mean",
+                     "sensheatf_mean", "latentheatf_mean",
+                     "strat_sum", "ice_sum")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  group_by(model, scenario, lake, gcm, name) |>
+  reframe(R = cor(calibrated, uncalibrated),
+          bias = mean(uncalibrated - calibrated, na.rm = TRUE)) |>
+  pivot_longer(6:7, names_to = "metr") |>
+  mutate(model = as.factor(model),
+         gcm = as.factor(gcm),
+         scenario = as.factor(scenario),
+         lake = as.factor(lake)) |>
+  group_by(name, metr) |>
+  reframe(fracs = var_frac(value, model, gcm, scenario, lake)) |>
+  unpack(fracs)
+
+saveRDS(frac_temp_diff, file.path("..", "derived_data", "var_decomp_diff.RDS"))
+
+# variance partitioning for each year for each variable for cali and uncali seperated
+frac_temp_mean <- dat |>
+  filter(name %in% c("surftemp_mean", "bottemp_mean",
+                     "sensheatf_mean", "latentheatf_mean",
+                     "strat_sum", "ice_sum")) |>
+  mutate(model = as.factor(model),
+         gcm = as.factor(gcm),
+         lake = as.factor(lake)) |>
+  group_by(name, cali, year, scenario) |>
+  reframe(fracs = var_frac_2(value, model, gcm, lake)) |>
+  unpack(fracs)
+
+saveRDS(frac_temp_mean, file.path("..", "derived_data", "var_decomp.RDS"))
 
 # vaiance partitioning for each year and variable with calibration as a factor
 frac_temp_mean_2 <- dat |>
   filter(name %in% c("surftemp_mean", "bottemp_mean",
                      "sensheatf_mean", "latentheatf_mean",
-                     "strat_sum", "heat_mean")) |>
+                     "strat_sum", "ice_sum")) |>
   mutate(model = as.factor(model),
          gcm = as.factor(gcm),
          lake = as.factor(lake),
@@ -200,10 +220,26 @@ frac_temp_mean_2 <- dat |>
 
 saveRDS(frac_temp_mean_2, file.path("..", "derived_data", "var_decomp_2.RDS"))
 
+# vaiance partitioning for slope of linear model
+frac_lm <- dat_trend |> pivot_longer(6:23) |>
+  filter(name %in% c("sl_surftemp_mean", "sl_bottemp_mean",
+                     "sl_sensheatf_mean", "sl_latentheatf_mean",
+                     "sl_strat_mean", "ls_ice_mean")) |>
+  mutate(model = as.factor(model),
+         gcm = as.factor(gcm),
+         lake = as.factor(lake),
+         scenario = as.factor(scenario),
+         cali = as.factor(cali)) |>
+  group_by(name) |>
+  reframe(fracs = var_frac_lm(value, model, gcm, lake, scenario, cali)) |>
+  unpack(fracs)
+
+saveRDS(frac_lm, file.path("..", "derived_data", "var_decomp_lm.RDS"))
+
 # load pre-calculated variance decomposition
 var_dec_diff <- readRDS(file.path("..", "derived_data", "var_decomp_diff.RDS"))
 var_dec <- readRDS(file.path("..", "derived_data", "var_decomp.RDS"))
-#var_dec_2 <- readRDS(file.path("..", "derived_data", "var_decomp_2.RDS"))
+var_dec_2 <- readRDS(file.path("..", "derived_data", "var_decomp_2.RDS"))
 
 
 ##------------------- first plots just plot everything (this is messy) -----------------------
@@ -287,7 +323,7 @@ for(v in unique(dat_trends_diff$name)) {
 ## over time
 p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
                           "sensheatf_mean", "latentheatf_mean",
-                          "strat_sum", "heat_mean")) |>
+                          "strat_sum", "ice_sum")) |>
   group_by(year, scenario, cali, name) |>
   reframe(mean = mean(value, na.rm = TRUE),
           median = median(value, na.rm = TRUE),
@@ -303,6 +339,21 @@ p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
 ggsave(file.path("..", "Output", "ts_all_vars.png"), p, width = 19, height = 17)
+
+## var dist over time
+var_dec$group <- factor(var_dec$group,
+                        levels = unique(var_dec$group),
+                        labels = unique(var_dec$group))
+
+var_dec |> filter(name == "latentheatf_mean") |> ggplot() + geom_area(aes(x = year, y = frac, fill = group),
+                                stat="identity", col = 1, lwd = 0.1) +
+  facet_grid(cali~scenario, scales = "free") + thm + scale_fill_viridis_d() +
+  ylab("Fraction of variance (-)") + xlab("Year")
+
+  
+var_dec |> filter(group == "model") |> ggplot() +
+  geom_line(aes(x = year, y = frac, col = cali)) +
+  facet_grid(name~scenario, scales = "free") + thm 
 
 ## scatter plots
 
@@ -325,19 +376,19 @@ p <- dat |> filter(name %in% c("sensheatf_mean", "latentheatf_mean")) |>
   ggplot() +
   geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_wrap(kmcluster~name, scales = "free") +
+  facet_grid(kmcluster~name, scales = "free") +
   scale_color_viridis_d() + thm
 
 ggsave(file.path("..", "Output", "scatter_heatf.png"), p, width = 13, height = 13)
 
 # just for total heat and strat
-p <- dat |> filter(name %in% c("strat_sum", "heat_mean")) |>
+p <- dat |> filter(name %in% c("strat_sum", "ice_sum")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   ggplot() +
   geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_wrap(kmcluster~name, scales = "free") +
+  facet_grid(kmcluster~name, scales = "free") +
   scale_color_viridis_d() + thm
 
 ggsave(file.path("..", "Output", "scatter_heat_strat.png"), p, width = 13, height = 13)
@@ -345,7 +396,7 @@ ggsave(file.path("..", "Output", "scatter_heat_strat.png"), p, width = 13, heigh
 ## variance of the variable by lake type
 p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
                           "sensheatf_mean", "latentheatf_mean",
-                          "strat_sum", "heat_mean")) |>
+                          "strat_sum", "ice_sum")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   group_by(year, model, scenario, cali, name, kmcluster) |>
   reframe(range = abs(diff(range(value, na.rm = TRUE))),
@@ -363,7 +414,7 @@ ggsave(file.path("..", "Output", "var_all_vars.png"), p, width = 19, height = 17
 ## R and bias for all
 p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
                           "sensheatf_mean", "latentheatf_mean",
-                          "strat_sum", "heat_mean")) |>
+                          "strat_sum", "ice_sum")) |>
     pivot_wider(names_from = cali, values_from = value) |>
     group_by(model, scenario, lake, gcm, name) |>
     reframe(R = cor(calibrated, uncalibrated),
