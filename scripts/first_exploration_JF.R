@@ -356,6 +356,21 @@ p <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean",
 
 ggsave(file.path("..", "Output", "ts_all_vars.png"), p, width = 19, height = 17)
 
+dat |> filter(name == "sensheatf_mean") |>
+  group_by(year, scenario, cali, model, name) |>
+  reframe(mean = mean(value, na.rm = TRUE),
+          median = median(value, na.rm = TRUE),
+          q5 = quantile(value, 0.05, na.rm = TRUE),
+          q25 = quantile(value, 0.25, na.rm = TRUE),
+          q75 = quantile(value, 0.75, na.rm = TRUE),
+          q95 = quantile(value, 0.95, na.rm = TRUE)) |>
+  ggplot() +
+  geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = model), alpha = 0.5) +
+  geom_line(aes(x = year, y = median, col = model), lwd = 1.23) +
+  facet_grid(cali~scenario, scales = "free") +
+  scale_fill_viridis_d() + scale_color_viridis_d() + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
 ## var dist over time for cali and uncali seperated
 var_dec$group <- factor(var_dec$group,
                         levels = unique(var_dec$group),
@@ -368,8 +383,9 @@ var_dec_i |> filter(name == "ice_sum") |> ggplot() + geom_area(aes(x = year, y =
 
 # just look at importance of factor model
 var_dec |> filter(group == "model") |> ggplot() +
-  geom_line(aes(x = year, y = frac, col = cali)) +
-  facet_grid(name~scenario, scales = "free") + thm 
+  geom_line(aes(x = year, y = frac, col = cali), lwd = 1.2) +
+  facet_grid(name~scenario, scales = "free") + thm +
+  scale_colour_viridis_d(end = 0.85, direction = -1)
 
 ## var dist over time for cali as own factor
 var_dec_2_i$group <- factor(var_dec_2_i$group,
