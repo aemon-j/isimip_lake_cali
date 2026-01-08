@@ -1,0 +1,18 @@
+variable,unit,how to calculate,plot_name,calculation instructions
+bottemp_max,°C,annual maximum bottom water temperature (lowest point/grid),Maximum bottom temperature (°C),
+bottemp_mean,°C,annual mean bottom temperature (lowest point/grid),Mean bottom temperature (°C),
+bottemp_min,°C,annual minimum bottom water temperature (lowest point/grid),Min bottom temperature (°C),
+surftemp_max,°C,annual maximum surface water temperature (at surface),Maximum surface temperature (°C),
+surftemp_mean,°C,annual mean surface water temperature (at surface),Mean surface temperature (°C),
+surftemp_min,°C,annual minimum surface water temperature (at surface),Min surface temperature (°C),
+heat_mean,J,annual mean heat stored in lake. calculated from volume averaged temperature and heat capacity of water.,Mean thermal heat (°C),Calculation instructions
+ice_start,doy,first day with ice cover in the period from 1.Okt to 30 Sept,Starting day of ice cover (-),Calculation instructions
+ice_end,doy,last day with ice cover in the period from 1.Okt to 30 Sept,Last day of ice cover (-),Calculation instructions
+ice_sum,days,Number of days with ice cover in the period from 1.Okt to 30 Sept,Ice cover duration (d),Calculation instructions
+latentheatf_mean,W/m^2,annual mean latent heat flux,Mean latent heat flux (W/m²),
+mixeddepth_mean,m,Annual mean mixed layer depth. Calculated as depth with 0.1 kg/m^3 density difference from surface (linear interpolation) during stratification period.,Mean mixed layer depth (m),Calculation instructions
+sensheatf_mean,W/m^2,annual mean sensible heat flux,Mean sensible heat flux (W/m²),
+strat_start,doy,"First day of stratification per year. Lake is considered as stratified if difference in water density between surface and botom > 0.1 kg/m^3 , for lakes in the southern hemisphere use 1.Okt to 30. Sept as year.",Starti of summer stratification (-),Calculation instructions
+strat_end,doy,"Last day of stratification per year. Lake is considered as stratified if difference in water density between surface and botom > 0.1 kg/m^3 , for lakes in the southern hemisphere use 1.Okt to 30. Sept as year.",End of summer stratification (-),Calculation instructions
+strat_sum,days,"Number of days with stratification per year. Lake is considered as stratified if difference in water density between surface and botom > 0.1 kg/m^3 , for lakes in the southern hemisphere use 1.Okt to 30. Sept as year.",Duration of summer stratification (d),Calculation instructions
+stratstrength_mean,°C,annual mean difference in surface and bottom temperature on stratified days (when density difference between bottom and surface is > 0.1 kg/m^3),Mean diff. in surface and bottom temp (°C),Calculation instructions
