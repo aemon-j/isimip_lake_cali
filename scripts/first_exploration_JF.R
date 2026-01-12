@@ -75,6 +75,12 @@ dat <- dat |> filter(year >= 1851)
 #                                       .default = lake))
 
 
+## read in performacnce metrics
+perf_files <- list.files(file.path("..", "raw_data", "performance"))
+
+perf <- lapply(perf_files, function(f) {
+  read_csv(file.path("..", "raw_data", "performance", f))}) |>
+  reshape2::melt(id.vars = 1:5) |> select(-L1)
 
 ##-------- calculations/trends ----------------------------------##
 
@@ -206,6 +212,26 @@ var_dec_lm_i <- var_dec_lm |>
 
 
 ##-----------  plots ----------------------------------
+
+## performacnce
+perf |> ggplot() + geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
+  facet_grid(.~metric, scales = "free") + thm + scale_fill_viridis_d("Status") +
+  xlab("") + ylab("") + theme(axis.text.y = element_blank(),
+                              axis.ticks.y = element_blank())
+
+perf |> ggplot() + geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
+  facet_grid(model~metric, scales = "free") + thm + scale_fill_viridis_d("Status") +
+  xlab("") + ylab("") + theme(axis.text.y = element_blank(),
+                              axis.ticks.y = element_blank())
+
+## improovement of performance
+perf |> pivot_wider(names_from = cali, values_from = value) |>
+  mutate(impr = uncalibrated - calibrated) |> ggplot() +
+  geom_density_ridges(aes(x = impr, y = model, fill = model)) +
+  facet_grid(metric~., scales = "free") + scale_fill_viridis_d("Model") + thm +
+  xlab("Improovement") + ylab("") + theme(axis.text.y = element_blank(),
+                                          axis.ticks.y = element_blank()) +
+  xlim(-7.5, 10)
 
 ## over time
 p <- dat |>
