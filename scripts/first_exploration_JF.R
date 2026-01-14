@@ -18,7 +18,7 @@ vars_to_evaluate <- c("surftemp_mean", "bottemp_mean",
                       #"sensheatf_mean", "latentheatf_mean",
                       "strat_sum", "ice_sum")
 
-##------------- read in data --------------------##
+##------------- read in data --------------------
 
 # read in lake meta data
 meta <- read.csv("../raw_data/lake_characteristics.csv") |>
@@ -82,7 +82,22 @@ perf <- lapply(perf_files, function(f) {
   read_csv(file.path("..", "raw_data", "performance", f))}) |>
   reshape2::melt(id.vars = 1:5) |> select(-L1)
 
-##-------- calculations/trends ----------------------------------##
+##-------- calculations/trends ----------------------------------
+
+## improovement in rmse and difference between calibrated and uncalibrated
+dat_diff_perf <- dat |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  group_by(model, scenario, lake, name) |>
+  reframe(mean = mean(diff),
+          median = median(diff))
+
+imp_rmse <- perf |> filter(metric == "rmse") |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(impr = uncalibrated - calibrated)
+
+dat_diff_perf <- dat_diff_perf |>
+  left_join(imp_rmse, by = c(lake = "lake", model = "model"))
 
 ## trends
 # calculate slope, intercept and mean value of lm
@@ -232,6 +247,12 @@ perf |> pivot_wider(names_from = cali, values_from = value) |>
   xlab("Improovement") + ylab("") + theme(axis.text.y = element_blank(),
                                           axis.ticks.y = element_blank()) +
   xlim(-7.5, 10)
+
+## improovement in rmse vs mean difference calibrated and uncalibrated
+dat_diff_perf |> ggplot() + geom_point(aes(x = mean, y = impr)) +
+  geom_abline(aes(intercept = 0, slope = 1), col = "grey") +
+  facet_grid(scenario~name, scales = "free") + thm
+
 
 ## over time
 p <- dat |>
@@ -483,8 +504,8 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
-  facet_grid(scenario ~ plot_name) +
-  theme_pubr(base_size = 16) + grids() +
+  facet_grid(scenario ~ plot_name, labeller = label_wrap_gen(23)) +
+  theme_pubr(base_size = 16) + grids() + xlim(-0.03, 0.03) +
   xlab("Temp. slope difference (°C/a)") +
   scale_fill_viridis_d("Lake type") + ylab("") +
   thm + theme(axis.text.y = element_blank(),
@@ -502,8 +523,9 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
-  facet_grid(scenario ~ plot_name, scales = "free") +
-  theme_pubr(base_size = 16) + grids() +
+  facet_grid(scenario ~ plot_name, scales = "free",
+             labeller = label_wrap_gen(23)) +
+  theme_pubr(base_size = 16) + grids() + xlim(-1.5, 1) +
   xlab("Dur. slope difference (d/a)") +
   scale_fill_viridis_d("Lake type") + ylab("") +
   thm + theme(axis.text.y = element_blank(),
@@ -528,10 +550,10 @@ var_dec_lm$group <- factor(var_dec_lm$group,
 p <- var_dec_lm |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_col(aes(x = cali, y = frac, fill = group)) +
-  facet_grid(plot_name~scenario, labeller = label_wrap_gen(23)) + thm +
+  facet_grid(scenario~plot_name, labeller = label_wrap_gen(23)) + thm +
   scale_fill_manual("factor", values = cols) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 11),
         strip.text.y = element_text(size = 11)) + xlab("") +
   ylab("Fraction of variance (-)")
 
-ggsave(file.path("..", "Output", "var_Decomp_R_bias.pdf"), p, width = 13, height = 11)
+ggsave(file.path("..", "Output", "var_Decomp_lm.pdf"), p, width = 13, height = 11)
