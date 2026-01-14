@@ -117,7 +117,8 @@ dat_trends_diff <- dat_trend |>
   pivot_longer(cols = c(slope, intercept, mean_h), names_to = "var_lm") |>
   pivot_wider(names_from = cali, values_from = value,
               id_cols = c(model, scenario, lake, gcm, name, var_lm)) |>
-  mutate(diff = `uncalibrated` - calibrated) |>
+  mutate(diff = `uncalibrated` - calibrated,
+         rel_diff = diff/calibrated) |>
   select(- calibrated, -`uncalibrated`)
 
 
@@ -243,7 +244,7 @@ perf |> ggplot() + geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
 perf |> pivot_wider(names_from = cali, values_from = value) |>
   mutate(impr = uncalibrated - calibrated) |> ggplot() +
   geom_density_ridges(aes(x = impr, y = model, fill = model)) +
-  facet_grid(metric~., scales = "free") + scale_fill_viridis_d("Model") + thm +
+  facet_grid(.~metric, scales = "free") + scale_fill_viridis_d("Model") + thm +
   xlab("Improovement") + ylab("") + theme(axis.text.y = element_blank(),
                                           axis.ticks.y = element_blank()) +
   xlim(-6, 6)
@@ -383,26 +384,6 @@ var_dec |> filter(group == "model") |> ggplot() +
 
 ## scatter plots
 
-# just for mean surf & bot temp
-dat |> filter(name %in% c("surftemp_mean", "bottemp_mean")) |>
-  pivot_wider(names_from = cali, values_from = value) |>
-  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  ggplot() +
-  geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
-  geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_grid(kmcluster~name, scales = "free") +
-  scale_color_viridis_d() + thm
-
-# just for ice and strat
-dat |> filter(name %in% c("strat_sum", "ice_sum")) |>
-  pivot_wider(names_from = cali, values_from = value) |>
-  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  ggplot() +
-  geom_point(aes(x = calibrated, y = uncalibrated, col = model), alpha = 0.5) +
-  geom_abline(aes(slope = 1, intercept = 0), lty = "dashed") +
-  facet_grid(kmcluster~name, scales = "free") +
-  scale_color_viridis_d() + thm
-
 # combined with binned data
 p1 <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
@@ -438,7 +419,22 @@ ggsave(file.path("..", "Output", "scatter_all_vars.pdf"), p, width = 13,
        height = 11, bg = "white")
 
 
+## scatter plot of strat dur split over lakes
+p <- dat |> filter(name %in% c("strat_sum")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  ggplot() + geom_hex(aes(x = calibrated, y = uncalibrated)) +
+  geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
+  facet_grid(kmcluster~model, scales = "free",
+             labeller = label_wrap_gen(23)) + thm +
+  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 10000)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.y = element_text(size = 11),
+        legend.key.size = unit(1.5,"line"))
 
+ggsave(file.path("..", "Output", "scatter_strat.pdf"), p, width = 13,
+       height = 11, bg = "white")
 
 ## variance of the variable by lake type
 dat |>
@@ -504,7 +500,7 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
-  facet_grid(scenario ~ plot_name, labeller = label_wrap_gen(23)) +
+  facet_grid(plot_name~scenario, labeller = label_wrap_gen(23)) +
   theme_pubr(base_size = 16) + grids() + xlim(-0.03, 0.03) +
   xlab("Temp. slope difference (°C/a)") +
   scale_fill_viridis_d("Lake type") + ylab("") +
@@ -512,18 +508,13 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
               axis.ticks.y = element_blank(),
               strip.text.y = element_text(size = 11))
 
-#ggsave(file.path("..", "Output", "dist_slope_diff_temp.pdf"), p, width = 13, height = 9)
-
-
-
-
 # trend just for strat dur and total heat
 p2 <- dat_trends_diff |> filter(var_lm == "slope",
                                name %in% c("ice_sum", "strat_sum")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
-  facet_grid(scenario ~ plot_name, scales = "free",
+  facet_grid(plot_name~scenario, scales = "free",
              labeller = label_wrap_gen(23)) +
   theme_pubr(base_size = 16) + grids() + xlim(-1.5, 1) +
   xlab("Dur. slope difference (d/a)") +
@@ -532,16 +523,50 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
               axis.ticks.y = element_blank(),
               strip.text.y = element_text(size = 11))
 
-#ggsave(file.path("..", "Output", "dist_slope_diff_strat_heat.pdf"), p, width = 13, height = 9)
-
-p <- ggarrange(p1 + theme(strip.background.y = element_blank(),
-                          strip.text.y = element_blank(),
-                          plot.margin = margin(t = 10, l = 10, b = 10, r = 0)),
-               p2 + theme(plot.margin = margin(t = 10, l = 0, b = 10, r = 10)),
-               ncol = 2, common.legend = TRUE)
+p <- ggarrange(p1, p2, nrow = 2, common.legend = TRUE)
 
 ggsave("../Output/diff_slope_dist.pdf", p, width = 13, height = 9)
 
+
+## dist of slope difference
+# trend just for surf and bot temp
+col <- viridis::turbo(5)[c(2, 1, 3:5)]
+p1 <- dat_trends_diff |> filter(var_lm == "slope",
+                                name %in% c("bottemp_mean", "surftemp_mean")) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  ggplot() + geom_density_ridges(aes(x = rel_diff*100, y = scenario, fill = scenario)) +
+  facet_grid(plot_name~., labeller = label_wrap_gen(23), scales = "free") +
+  theme_pubr(base_size = 16) + grids() + xlim(-250, 200) +
+  xlab("") +
+  ylab("") + scale_fill_manual("Scenario", values = col) +
+  thm + theme(axis.text.y = element_blank(),
+              axis.ticks.y = element_blank(),
+              strip.text.y = element_text(size = 11),
+              plot.margin = margin(b = 0, t = 2, r = 0, l = 5))
+
+# trend just for strat dur and total heat
+p2 <- dat_trends_diff |> filter(var_lm == "slope",
+                                name %in% c("ice_sum", "strat_sum")) |>
+  mutate(rel_diff = ifelse(is.finite(rel_diff), rel_diff, NA)) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  ggplot() + geom_density_ridges(aes(x = rel_diff*100, y = scenario, fill = scenario)) +
+  facet_grid(plot_name~., scales = "free",
+             labeller = label_wrap_gen(23)) +
+  theme_pubr(base_size = 16) + grids() + xlim(-250, 200) +
+  xlab("") +
+  ylab("") + scale_fill_manual("Scenario", values = col) +
+  thm + theme(axis.text.y = element_blank(),
+              axis.ticks.y = element_blank(),
+              strip.text.y = element_text(size = 11),
+              plot.margin = margin(b = 0, t = 2, r = 5, l = 0))
+
+p <- ggarrange(p1, p2, ncol = 2, common.legend = TRUE)
+p <- annotate_figure(p,
+                     bottom = textGrob("relative difference (%)",
+                                       gp = gpar(cex = 1.4), vjust = -0.5))
+ggsave("../Output/diff_slope_dist_simple.pdf", p, width = 13, height = 9)
 
 ## dist of mean value difference
 # trend just for surf and bot temp
