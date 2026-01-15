@@ -84,7 +84,7 @@ perf <- lapply(perf_files, function(f) {
 
 ##-------- calculations/trends ----------------------------------
 
-## improovement in rmse and difference between calibrated and uncalibrated
+## improvement in rmse and difference between calibrated and uncalibrated
 dat_diff_perf <- dat |>
   pivot_wider(names_from = cali, values_from = value) |>
   mutate(diff = uncalibrated - calibrated) |>
@@ -305,6 +305,23 @@ p <- dat |>
 
 ggsave(file.path("..", "Output", "ts_diff_all_vars.pdf"), p,  width = 13, height = 9)
 
+# distribution of differences
+p <- dat |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  ggplot() +
+  geom_density_ridges(aes(x = diff, y = model, fill = model)) +
+  facet_grid(.~plot_name, scales = "free", labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_d("") + scale_color_viridis_d() + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        strip.text.y = element_text(size = 11)) + ylab("") +
+  xlab("Difference uncalibrated - calibrated")
+
+ggsave(file.path("..", "Output", "dist_diff_all_vars.pdf"), p,  width = 13, height = 9)
 # plot relative difference
 p <- dat |>
   pivot_wider(names_from = cali, values_from = value) |>
@@ -635,10 +652,10 @@ var_dec_lm$group <- factor(var_dec_lm$group,
 p <- var_dec_lm |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_col(aes(x = cali, y = frac, fill = group)) +
-  facet_grid(scenario~plot_name, labeller = label_wrap_gen(23)) + thm +
+  facet_grid(plot_name~scenario, labeller = label_wrap_gen(23)) + thm +
   scale_fill_manual("factor", values = cols) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 11),
         strip.text.y = element_text(size = 11)) + xlab("") +
   ylab("Fraction of variance (-)")
 
-ggsave(file.path("..", "Output", "var_Decomp_lm.pdf"), p, width = 13, height = 11)
+ggsave(file.path("..", "Output", "var_decomp_lm.pdf"), p, width = 13, height = 11)
