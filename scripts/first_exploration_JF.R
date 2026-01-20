@@ -230,24 +230,26 @@ var_dec_lm_i <- var_dec_lm |>
 ##-----------  plots ----------------------------------
 
 ## performacnce
-perf |> ggplot() + geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
+perf |> filter(value >= -10, value <= 10) |> ggplot() +
+  geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
   facet_grid(.~metric, scales = "free") + thm + scale_fill_viridis_d("Status") +
-  xlab("") + ylab("") + theme(axis.text.y = element_blank(),
+  xlab("Value") + ylab("") + theme(axis.text.y = element_blank(),
                               axis.ticks.y = element_blank())
 
-perf |> ggplot() + geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
+perf |> filter(value >= -10, value <= 10) |> ggplot() +
+  geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
   facet_grid(model~metric, scales = "free") + thm + scale_fill_viridis_d("Status") +
-  xlab("") + ylab("") + theme(axis.text.y = element_blank(),
+  xlab("Value") + ylab("") + theme(axis.text.y = element_blank(),
                               axis.ticks.y = element_blank())
 
 ## improovement of performance
 perf |> pivot_wider(names_from = cali, values_from = value) |>
-  mutate(impr = uncalibrated - calibrated) |> ggplot() +
+  mutate(impr = uncalibrated - calibrated) |> filter(impr <= 6, impr >= -6) |>
+  ggplot() +
   geom_density_ridges(aes(x = impr, y = model, fill = model)) +
   facet_grid(.~metric, scales = "free") + scale_fill_viridis_d("Model") + thm +
   xlab("Improovement") + ylab("") + theme(axis.text.y = element_blank(),
-                                          axis.ticks.y = element_blank()) +
-  xlim(-6, 6)
+                                          axis.ticks.y = element_blank())
 
 ## improovement in rmse vs mean difference calibrated and uncalibrated
 dat_diff_perf |> ggplot() + geom_point(aes(x = mean, y = impr)) +
