@@ -63,7 +63,7 @@ dat <- dat |> mutate(scenario = case_match(scenario,
 
 
 # temporary: filter out data before 1851 and 2021 for ssp scenarios
-dat <- dat |> filter(year >= 1851)
+dat <- dat |> filter(year >= 1851, lake != "Zurich")
 # # temporary fix lake names
 # dat <- dat |> mutate(lake = case_when(lake == "Mueggelsee" ~ "Muggelsee",
 #                                       lake == "NohipaloMustjaerv" ~ "NohipaloMustjarv",
@@ -81,6 +81,8 @@ perf_files <- list.files(file.path("..", "raw_data", "performance"))
 perf <- lapply(perf_files, function(f) {
   read_csv(file.path("..", "raw_data", "performance", f))}) |>
   reshape2::melt(id.vars = 1:5) |> select(-L1)
+
+perf <- filter(perf, lake != "Zurich")
 
 ##-------- calculations/trends ----------------------------------
 
@@ -321,6 +323,21 @@ p <- dat |>
 
 ggsave(file.path("..", "Output", "ts_all_vars.pdf"), p, width = 13, height = 9)
 
+# first and last decade
+p <- dat |>
+  mutate(dec = paste0(floor(year/10)*10, "s")) |>
+  filter(dec %in% c("1850s", "2010s", "2100s"),
+         !(dec == "2010s" & scenario == "Picontrol")) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  ggplot() +
+  geom_density_ridges(aes(x = value, y = dec, fill = cali), alpha = 0.5) +
+  facet_grid(scenario~plot_name, scales = "free", labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_d("") + scale_color_viridis_d("") + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.x = element_text(size = 11)) + ylab("Decade") + xlab("Value")
+
+ggsave(file.path("..", "Output", "dist_all_vars.pdf"), p, width = 13, height = 9)
+
 # plot difference
 p <- dat |>
   pivot_wider(names_from = cali, values_from = value) |>
@@ -543,6 +560,41 @@ p <- var_dec_diff |> mutate(interaction = grepl(":", group)) |>
   ylab("Fraction of variance (-)")
 
 ggsave(file.path("..", "Output", "var_Decomp_R_bias.pdf"), p, width = 13, height = 9)
+
+## explanation plot for difference of linear slope
+p <- dat |> filter(lake == "Stechlin", scenario == "SSP5-8.5",
+              name == "surftemp_mean", gcm == "mpi-esm1-2-hr",
+              model == "air2water4par") |>
+  ggplot() + geom_point(aes(x = year, y = value, col = cali), size = 3) +
+  scale_color_viridis_d("", option = "H", end = 0.85) + thm + xlab("Year") +
+  ylab("Mean surface water tempertaure (°C)") +
+  ggtitle("Lake Stechlin; air2water4par; SSP5-8.5; MPI-ESM1-2-HR") + ylim(9,17.5)
+
+ggsave(file.path("..", "Output", "explain_lm_diff1.pdf"), p, width = 11, height = 7)
+
+p <- dat |> filter(lake == "Stechlin", scenario == "SSP5-8.5",
+              name == "surftemp_mean", gcm == "mpi-esm1-2-hr",
+              model == "air2water4par") |>
+  ggplot() + geom_point(aes(x = year, y = value, col = cali), alpha = 0.666, size = 3) +
+  geom_smooth(aes(x = year, y = value, col = cali), method = "lm", size = 2) +
+  scale_color_viridis_d("", option = "H", end = 0.85) + thm + xlab("Year") +
+  ylab("Mean surface water tempertaure (°C)") +
+  ggtitle("Lake Stechlin; air2water4par; SSP5-8.5; MPI-ESM1-2-HR") + ylim(9,17.5)
+
+ggsave(file.path("..", "Output", "explain_lm_diff2.pdf"), p, width = 11, height = 7)
+
+p <- dat |> filter(lake == "Stechlin", scenario == "SSP5-8.5",
+              name == "surftemp_mean", gcm == "mpi-esm1-2-hr",
+              model == "air2water4par") |>
+  ggplot() +
+  geom_smooth(aes(x = year, y = value, col = cali), method = "lm", size = 2) +
+  stat_regline_equation(aes(x = year, y = value, col = cali), size = 8,
+                        show.legend = FALSE) +
+  scale_color_viridis_d("", option = "H", end = 0.85) + thm + xlab("Year") +
+  ylab("Mean surface water tempertaure (°C)") +
+  ggtitle("Lake Stechlin; air2water4par; SSP5-8.5; MPI-ESM1-2-HR") + ylim(9,17.5)
+
+ggsave(file.path("..", "Output", "explain_lm_diff3.pdf"), p, width = 11, height = 7)
 
 ## slope of linear model
 dat_trend |> ggplot() + geom_density_ridges(aes(y = cali, x = slope, fill = cali)) +
