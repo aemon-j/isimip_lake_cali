@@ -256,6 +256,46 @@ dat_diff_perf |> ggplot() + geom_point(aes(x = mean, y = impr)) +
   geom_abline(aes(intercept = 0, slope = 1), col = "grey") +
   facet_grid(scenario~name, scales = "free") + thm
 
+## plot raw data for surface temp
+p <- dat |> filter(name == "surftemp_mean") |>
+  mutate(grp = paste0(lake, gcm, model)) |>
+  ggplot() +
+  geom_line(aes(x = year, y = value, group = grp, col = cali),
+            lwd = 0.1, alpha = 0.1) +
+  facet_grid(cali~scenario, scales = "free") + thm +
+  scale_color_viridis_d("", end = 0.95) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, lwd = 1))) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.y = element_text(size = 11)) + ylab("Temperature (°C)") +
+  xlab("Year") + ggtitle("Mean anual surface water temperature")
+
+ggsave(file.path("..", "Output", "ts_stemp_raw.png"), p, width = 13, height = 9)
+
+## plot aggregated data for surface temp
+p <- dat |> filter(name == "surftemp_mean") |>
+  group_by(year, scenario, cali, name) |>
+  reframe(mean = mean(value, na.rm = TRUE),
+          median = median(value, na.rm = TRUE),
+          q5 = quantile(value, 0.05, na.rm = TRUE),
+          q25 = quantile(value, 0.25, na.rm = TRUE),
+          q75 = quantile(value, 0.75, na.rm = TRUE),
+          q95 = quantile(value, 0.95, na.rm = TRUE),
+          min = min(value, na.rm = TRUE),
+          max = max(value, na.rm = TRUE)) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  ggplot() +
+  geom_ribbon(aes(x = year, ymin = min, ymax = max, fill = cali), alpha = 0.35) +
+  #geom_ribbon(aes(x = year, ymin = q5, ymax = q95, fill = cali), alpha = 0.35) +
+  geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = cali), alpha = 0.35) +
+  geom_line(aes(x = year, y = median, col = cali), lwd = 1.23) +
+  facet_grid(cali~scenario, scales = "free", labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_d("", end = 0.95) +
+  scale_color_viridis_d("", end = 0.95) + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.y = element_text(size = 11)) + ylab("Temperautre (°C)") +
+  xlab("Year") + ggtitle("Mean anual surface water temperature")
+
+ggsave(file.path("..", "Output", "ts_stemp.png"), p, width = 13, height = 9)
 
 ## over time
 p <- dat |>
