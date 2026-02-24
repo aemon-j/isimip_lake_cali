@@ -232,11 +232,13 @@ var_dec_lm_i <- var_dec_lm |>
 ##-----------  plots ----------------------------------
 
 ## performacnce
-perf |> filter(value >= -10, value <= 10) |> ggplot() +
+p <- perf |> filter(value >= -10, value <= 10) |> ggplot() +
   geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
   facet_grid(.~metric, scales = "free") + thm + scale_fill_viridis_d("Status") +
   xlab("Value") + ylab("") + theme(axis.text.y = element_blank(),
                               axis.ticks.y = element_blank())
+
+ggsave(file.path("..", "Output", "performance.pdf"), p, width = 11, height = 5)
 
 perf |> filter(value >= -10, value <= 10) |> ggplot() +
   geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
@@ -250,7 +252,7 @@ perf |> pivot_wider(names_from = cali, values_from = value) |>
   ggplot() +
   geom_density_ridges(aes(x = impr, y = model, fill = model)) +
   facet_grid(.~metric, scales = "free") + scale_fill_viridis_d("Model") + thm +
-  xlab("Improovement") + ylab("") + theme(axis.text.y = element_blank(),
+  xlab("Improvement") + ylab("") + theme(axis.text.y = element_blank(),
                                           axis.ticks.y = element_blank())
 
 ## improovement in rmse vs mean difference calibrated and uncalibrated
@@ -323,7 +325,7 @@ p <- dat |>
 
 ggsave(file.path("..", "Output", "ts_all_vars.pdf"), p, width = 13, height = 9)
 
-# first and last decade
+# first and last decade split for cali and uncali
 p <- dat |>
   mutate(dec = paste0(floor(year/10)*10, "s")) |>
   filter(dec %in% c("1850s", "2010s", "2100s"),
@@ -363,6 +365,26 @@ p <- dat |>
         strip.text.y = element_text(size = 11)) + ylab("") + xlab("Year")
 
 ggsave(file.path("..", "Output", "ts_diff_all_vars.pdf"), p,  width = 13, height = 9)
+
+# first and last decade for difference
+p <- dat |>
+  mutate(dec = paste0(floor(year/10)*10, "s")) |>
+  filter(dec %in% c("1850s", "2010s", "2100s"),
+         !(dec == "2010s" & scenario == "Picontrol")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  group_by(scenario, plot_name, dec) |> filter(diff <= quantile(diff, 0.975),
+                                                diff >= quantile(diff, 0.25)) |>
+  ggplot() +
+  geom_violin(aes(y = diff, x = dec, fill = dec)) +
+  facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_d("") + scale_color_viridis_d("") + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.x = element_text(size = 11)) + xlab("Decade") +
+  ylab("Difference (uncalibrated - calibrated)")
+
+ggsave(file.path("..", "Output", "dist_difference.pdf"), p, width = 13, height = 9)
 
 # distribution of differences
 p <- dat |>
