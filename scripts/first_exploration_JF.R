@@ -743,6 +743,19 @@ p <- annotate_figure(p,
                                        gp = gpar(cex = 1.4), vjust = -0.5))
 ggsave("../Output/diff_slope_dist_simple.pdf", p, width = 13, height = 9)
 
+# get values for manuscript
+dat_trends_diff |> filter(var_lm == "slope") |>
+  mutate(rel_diff = ifelse(is.finite(rel_diff), rel_diff, NA)) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  group_by(name, scenario) |>
+  reframe(q05 = quantile(rel_diff, 0.05, na.rm = TRUE)*100,
+          q25 = quantile(rel_diff, 0.25, na.rm = TRUE)*100,
+          median = median(rel_diff, na.rm = TRUE)*100,
+          q75 = quantile(rel_diff, 0.75, na.rm = TRUE)*100,
+          q95 = quantile(rel_diff, 0.95, na.rm = TRUE)*100)
+
+
 ## dist of mean value difference
 # trend just for surf and bot temp
 p1 <- dat_trends_diff |> filter(var_lm == "mean_h",
