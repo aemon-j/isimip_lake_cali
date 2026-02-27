@@ -229,7 +229,7 @@ var_dec_lm_i <- var_dec_lm |>
   group_by(name, scenario, cali, group) |> reframe(frac = sum(frac))
 
 
-##-----------  plots ----------------------------------
+##-----------  plots & calculations ----------------------------------
 
 ## performacnce
 p <- perf |> filter(value >= -10, value <= 10) |> ggplot() +
@@ -240,13 +240,20 @@ p <- perf |> filter(value >= -10, value <= 10) |> ggplot() +
 
 ggsave(file.path("..", "Output", "performance.pdf"), p, width = 11, height = 5)
 
+# print values for manuscript
+perf |> group_by(metric, cali) |>
+  reframe(median = median(value),
+          iqr = quantile(value, 0.25) - quantile(value, 0.75),
+          sd = sd(value))
+
+# performance split by model
 perf |> filter(value >= -10, value <= 10) |> ggplot() +
   geom_density_ridges(aes(x = value, y = cali, fill = cali)) +
   facet_grid(model~metric, scales = "free") + thm + scale_fill_viridis_d("Status") +
   xlab("Value") + ylab("") + theme(axis.text.y = element_blank(),
                               axis.ticks.y = element_blank())
 
-## improovement of performance
+## improvement of performance
 perf |> pivot_wider(names_from = cali, values_from = value) |>
   mutate(impr = uncalibrated - calibrated) |> filter(impr <= 6, impr >= -6) |>
   ggplot() +
@@ -328,8 +335,9 @@ ggsave(file.path("..", "Output", "ts_all_vars.pdf"), p, width = 13, height = 9)
 # first and last decade split for cali and uncali
 p <- dat |>
   mutate(dec = paste0(floor(year/10)*10, "s")) |>
-  filter(dec %in% c("1850s", "2010s", "2100s"),
-         !(dec == "2010s" & scenario == "Picontrol")) |>
+  filter(dec %in% c("1850s", "2000s","2020s", "2090s"),
+         !(dec == "2000s" & scenario == "Picontrol"),
+         !(dec == "2020s" & scenario == "Picontrol")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() +
   geom_density_ridges(aes(x = value, y = dec, fill = cali), alpha = 0.5) +
@@ -347,16 +355,18 @@ p <- dat |>
   group_by(year, scenario, name) |>
   reframe(mean = mean(diff, na.rm = TRUE),
           median = median(diff, na.rm = TRUE),
+          q1 = quantile(diff, 0.01, na.rm = TRUE),
           q5 = quantile(diff, 0.05, na.rm = TRUE),
           q25 = quantile(diff, 0.25, na.rm = TRUE),
           q75 = quantile(diff, 0.75, na.rm = TRUE),
           q95 = quantile(diff, 0.95, na.rm = TRUE),
+          q99 = quantile(diff, 0.99, na.rm = TRUE),
           min = min(diff, na.rm = TRUE),
           max = max(diff, na.rm = TRUE)) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() +
   #geom_ribbon(aes(x = year, ymin = min, ymax = max), alpha = 0.35) +
-  geom_ribbon(aes(x = year, ymin = q5, ymax = q95), alpha = 0.35) +
+  geom_ribbon(aes(x = year, ymin = q1, ymax = q99), alpha = 0.35) +
   geom_ribbon(aes(x = year, ymin = q25, ymax = q75), alpha = 0.35) +
   geom_line(aes(x = year, y = median), lwd = 1.23) +
   facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(23)) +
@@ -366,19 +376,38 @@ p <- dat |>
 
 ggsave(file.path("..", "Output", "ts_diff_all_vars.pdf"), p,  width = 13, height = 9)
 
+# print values for manuscript
+dat |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  group_by(name) |>
+  reframe(mean = mean(diff, na.rm = TRUE),
+          median = median(diff, na.rm = TRUE),
+          q1 = quantile(diff, 0.01, na.rm = TRUE),
+          q5 = quantile(diff, 0.05, na.rm = TRUE),
+          q25 = quantile(diff, 0.25, na.rm = TRUE),
+          q75 = quantile(diff, 0.75, na.rm = TRUE),
+          q95 = quantile(diff, 0.95, na.rm = TRUE),
+          q99 = quantile(diff, 0.99, na.rm = TRUE),
+          min = min(diff, na.rm = TRUE),
+          max = max(diff, na.rm = TRUE))
+
+
+
 # first and last decade for difference
 p <- dat |>
   mutate(dec = paste0(floor(year/10)*10, "s")) |>
-  filter(dec %in% c("1850s", "2010s", "2100s"),
-         !(dec == "2010s" & scenario == "Picontrol")) |>
+  filter(dec %in% c("1850s", "2000s","2020s", "2090s"),
+         !(dec == "2000s" & scenario == "Picontrol"),
+         !(dec == "2020s" & scenario == "Picontrol")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   mutate(diff = uncalibrated - calibrated) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   group_by(scenario, plot_name, dec) |> filter(diff <= quantile(diff, 0.975),
                                                 diff >= quantile(diff, 0.25)) |>
   ggplot() +
-  geom_violin(aes(y = diff, x = dec, fill = dec)) +
-  facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(23)) +
+  geom_density_ridges(aes(x = diff, y = dec, fill = dec), alpha = 0.666) +
+  facet_grid(scenario~plot_name, scales = "free", labeller = label_wrap_gen(23)) +
   scale_fill_viridis_d("") + scale_color_viridis_d("") + thm +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
         strip.text.x = element_text(size = 11)) + xlab("Decade") +
@@ -516,6 +545,12 @@ p <- annotate_figure(p, left = textGrob("Uncalibrated", rot = 90, vjust = 1, gp 
 ggsave(file.path("..", "Output", "scatter_all_vars.pdf"), p, width = 13,
        height = 11, bg = "white")
 
+# R and bias for the plot
+dat |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  group_by(name, scenario) |>
+  reframe(R = cor(calibrated, uncalibrated),
+          bias = mean(uncalibrated - calibrated, na.rm = TRUE))
 
 ## scatter plot of strat dur split over lakes
 p <- dat |> filter(name %in% c("strat_sum")) |>
@@ -533,6 +568,13 @@ p <- dat |> filter(name %in% c("strat_sum")) |>
 
 ggsave(file.path("..", "Output", "scatter_strat.pdf"), p, width = 13,
        height = 11, bg = "white")
+
+## list names of the lakes and models with large deviations
+dat |> filter(name == "strat_sum") |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  filter (abs(diff) >= 200 ) |> group_by(model) |>
+  reframe(n = n()) |> distinct(model)
 
 ## variance of the variable by lake type
 dat |>
