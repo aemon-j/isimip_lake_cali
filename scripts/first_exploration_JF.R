@@ -51,7 +51,7 @@ dat <- lapply(files$file, function(f) {
   reshape2::melt(id.vars = 1:8) |> select(-L1)
 
 # rename scenarios
-dat <- dat |> mutate(scenario = case_match(scenario,
+dat <- dat |> mutate(scenario = replace_values(scenario,
                                         "picontrol" ~ "Picontrol",
                                         "historical" ~ "Historical",
                                         "ssp126" ~ "SSP1-2.6",
@@ -63,6 +63,7 @@ dat <- dat |> mutate(scenario = case_match(scenario,
 
 
 # temporary: filter out data before 1851 and 2021 for ssp scenarios
+# as well as Zurich which is almost the same as lower Zurich
 dat <- dat |> filter(year >= 1851, lake != "Zurich")
 # # temporary fix lake names
 # dat <- dat |> mutate(lake = case_when(lake == "Mueggelsee" ~ "Muggelsee",
@@ -152,24 +153,24 @@ dat_metr <- dat |> pivot_wider(names_from = cali, values_from = value) |>
 # }
 # 
 # 
-# ## variance decomposition without with calibrated
-# var_frac_c <- function(value, model, gcm, lake, cali) {
-#   dat <- data.frame(model = model, gcm = gcm,
-#                     lake = lake, cali = cali,
-#                     value = value)
-#   an <- anova(lm(value ~ model * gcm * lake * cali, data = dat))
-#   tmp <- print(an)
-#   totsst <- sum(an$`Sum Sq`)
-#   sep <- an$`Sum Sq`
-#   #sep <- c(sep[1:4], sum(sep[5:length(sep)]))/totsst
-#   #sep <- data.frame(group = c(rownames(tmp)[1:4], "interactions"),
-#   #                  frac = sep)
-#   sep <- sep/totsst
-#   sep <- data.frame(group = c(rownames(tmp)),
-#                     frac = sep)
-#   return(sep)
-# }
-# 
+## variance decomposition without with calibrated
+var_frac_c <- function(value, model, gcm, lake, cali) {
+  dat <- data.frame(model = model, gcm = gcm,
+                    lake = lake, cali = cali,
+                    value = value)
+  an <- anova(lm(value ~ model * gcm * lake * cali, data = dat))
+  tmp <- print(an)
+  totsst <- sum(an$`Sum Sq`)
+  sep <- an$`Sum Sq`
+  #sep <- c(sep[1:4], sum(sep[5:length(sep)]))/totsst
+  #sep <- data.frame(group = c(rownames(tmp)[1:4], "interactions"),
+  #                  frac = sep)
+  sep <- sep/totsst
+  sep <- data.frame(group = c(rownames(tmp)),
+                    frac = sep)
+  return(sep)
+}
+
 # 
 # 
 # # variance partitioning for the R and bias of cali and uncali
@@ -198,6 +199,19 @@ dat_metr <- dat |> pivot_wider(names_from = cali, values_from = value) |>
 # saveRDS(frac_temp_mean, file.path("..", "derived_data", "var_decomp_diff_ts.RDS"))
 # 
 # 
+# # variance partitioning for each year for each variable
+# frac_temp_mean <- dat |>
+#   mutate(model = as.factor(model),
+#          gcm = as.factor(gcm),
+#          lake = as.factor(lake),
+#          cali = as.factor(cali)) |>
+#   group_by(name, year, scenario) |>
+#   reframe(fracs = var_frac_c(value, model, gcm, lake, cali)) |>
+#   unpack(fracs)
+# 
+# saveRDS(frac_temp_mean, file.path("..", "derived_data", "var_decomp_all_ts.RDS"))
+# 
+# 
 # # vaiance partitioning for slope of linear model
 # frac_lm <- dat_trend |>
 #   mutate(model = as.factor(model),
@@ -219,6 +233,12 @@ var_dec_diff_i <- var_dec_diff |>
 # var decomposition for the time series of difference between calibrated and uncalibrated
 var_dec <- readRDS(file.path("..", "derived_data", "var_decomp_diff_ts.RDS"))
 var_dec_i <- var_dec |>
+  mutate(group = ifelse(str_detect(group, ":"), "interaction", group)) |>
+  group_by(name, year, scenario, group) |> reframe(frac = sum(frac))
+
+# var decomposition for time series
+var_dec_all <- readRDS(file.path("..", "derived_data", "var_decomp_all_ts.RDS"))
+var_dec_all_i <- var_dec_all |>
   mutate(group = ifelse(str_detect(group, ":"), "interaction", group)) |>
   group_by(name, year, scenario, group) |> reframe(frac = sum(frac))
 
@@ -266,6 +286,60 @@ perf |> pivot_wider(names_from = cali, values_from = value) |>
 dat_diff_perf |> ggplot() + geom_point(aes(x = mean, y = impr)) +
   geom_abline(aes(intercept = 0, slope = 1), col = "grey") +
   facet_grid(scenario~name, scales = "free") + thm
+
+# raw overview plot with temporal developpement for all variables just for ssp3-70
+p <- dat |> filter(scenario == "SSP3-7.0", year >= 2017) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  group_by(year, kmcluster, scenario, plot_name, cali) |>
+  reframe(mean = mean(value, na.rm = TRUE),
+          median = median(value, na.rm = TRUE),
+          q5 = quantile(value, 0.05, na.rm = TRUE),
+          q25 = quantile(value, 0.25, na.rm = TRUE),
+          q75 = quantile(value, 0.75, na.rm = TRUE),
+          q95 = quantile(value, 0.95, na.rm = TRUE),
+          min = min(value, na.rm = TRUE),
+          max = max(value, na.rm = TRUE),
+          se = sd(value, na.rm = TRUE)/sqrt(n())) |>
+  ggplot() +
+  #geom_ribbon(aes(x = year, ymin = mean - se, ymax = mean + se, fill = cali), alpha = 0.333) +
+  #geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = cali), alpha = 0.333) +
+  geom_line(aes(x = year, y = mean, col = cali), lwd = 1) +
+  facet_grid(plot_name~kmcluster, scales = "free", labeller = label_wrap_gen(21)) + thm +
+  #scale_fill_viridis_d("Calibrated", end = 0.95) +
+  scale_color_viridis_d("Calibrated", end = 0.95) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.x = element_text(size = 11),
+        strip.text.y = element_text(size = 11)) + ggtitle("SSP3-7.0") +
+  xlab("Year") + ylab("")
+
+ggsave(file.path("..", "Output", "ts_split_laketype.pdf"), p, width = 9, height = 10)
+
+
+# raw overview plot with temporal developpement for all variables just for ssp3-70
+p <- dat |> filter(scenario == "SSP3-7.0", year >= 2017) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  group_by(year, scenario, plot_name, cali) |>
+  reframe(mean = mean(value, na.rm = TRUE),
+          median = median(value, na.rm = TRUE),
+          q5 = quantile(value, 0.05, na.rm = TRUE),
+          q25 = quantile(value, 0.25, na.rm = TRUE),
+          q75 = quantile(value, 0.75, na.rm = TRUE),
+          q95 = quantile(value, 0.95, na.rm = TRUE),
+          min = min(value, na.rm = TRUE),
+          max = max(value, na.rm = TRUE),
+          se = sd(value, na.rm = TRUE)/sqrt(n())) |>
+  ggplot() +
+  #geom_ribbon(aes(x = year, ymin = mean - se, ymax = mean + se, fill = cali), alpha = 0.333) +
+  geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = cali), alpha = 0.333) +
+  geom_line(aes(x = year, y = median, col = cali), lwd = 1) +
+  facet_grid(plot_name~., scales = "free", labeller = label_wrap_gen(21)) + thm +
+  scale_fill_viridis_d("Calibrated", end = 0.95) +
+  scale_color_viridis_d("Calibrated", end = 0.95) +
+  ggtitle("SSP3-7.0") +
+  xlab("Year") + ylab("")
+
+ggsave(file.path("..", "Output", "ts_split_ssp370.pdf"), p, width = 9, height = 10)
 
 ## plot raw data for surface temp
 p <- dat |> filter(name == "surftemp_mean") |>
@@ -676,7 +750,7 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
   facet_grid(plot_name~scenario, labeller = label_wrap_gen(23)) +
-  theme_pubr(base_size = 16) + grids() + xlim(-0.03, 0.03) +
+  theme_pubr(base_size = 16) + grids() + xlim(-0.035, 0.03) +
   xlab("Temp. slope difference (°C/a)") +
   scale_fill_viridis_d("Lake type") + ylab("") +
   thm + theme(axis.text.y = element_blank(),
@@ -691,7 +765,7 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
   ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster, fill = kmcluster)) +
   facet_grid(plot_name~scenario, scales = "free",
              labeller = label_wrap_gen(23)) +
-  theme_pubr(base_size = 16) + grids() + xlim(-1.5, 1) +
+  theme_pubr(base_size = 16) + grids() + xlim(-1.75, 1.) +
   xlab("Dur. slope difference (d/a)") +
   scale_fill_viridis_d("Lake type") + ylab("") +
   thm + theme(axis.text.y = element_blank(),
