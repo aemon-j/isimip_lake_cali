@@ -418,7 +418,8 @@ p <- dat |>
   facet_grid(scenario~plot_name, scales = "free", labeller = label_wrap_gen(23)) +
   scale_fill_viridis_d("") + scale_color_viridis_d("") + thm +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-        strip.text.x = element_text(size = 11)) + ylab("Decade") + xlab("Value")
+        strip.text.x = element_text(size = 11)) + ylab("Decade") + xlab("Value") +
+  xlim(0, NA)
 
 ggsave(file.path("..", "Output", "dist_all_vars.pdf"), p, width = 13, height = 9)
 
