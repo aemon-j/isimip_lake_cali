@@ -689,7 +689,7 @@ p <- dat |> filter(name %in% c("strat_sum")) |>
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
   facet_grid(kmcluster~model, scales = "free",
              labeller = label_wrap_gen(23)) + thm +
-  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 10000)) +
+  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
         strip.text.y = element_text(size = 11),
         legend.key.size = unit(1.5,"line"))
@@ -706,12 +706,12 @@ p <- dat |> filter(name %in% c("bottemp_mean")) |>
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
   facet_grid(kmcluster~model, scales = "free",
              labeller = label_wrap_gen(23)) + thm +
-  scale_fill_viridis_c("Count", trans = "log10") +
+  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
         strip.text.y = element_text(size = 11),
         legend.key.size = unit(1.5,"line"))
 
-ggsave(file.path("..", "Output", "bottemp_strat.pdf"), p, width = 13,
+ggsave(file.path("..", "Output", "scatter_bottemp.pdf"), p, width = 13,
        height = 11, bg = "white")
 
 ## list names of the lakes and models with large deviations
@@ -910,17 +910,9 @@ ggsave("../Output/diff_slope_dist_simple.pdf", p, width = 13, height = 9)
 # why is there a bum at -100%
 dat_trends_diff |> filter(var_lm == "slope",
                           name %in% c("ice_sum", "strat_sum")) |>
-  mutate(rel_diff = ifelse(is.finite(rel_diff), rel_diff, NA)) |>
-  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
-  ggplot() + geom_hex(aes(x = rel_diff*100, y = diff)) +
-  facet_grid(plot_name~kmcluster, scales = "free",
-             labeller = label_wrap_gen(23)) +
-  theme_pubr(base_size = 16) + grids() + xlim(-250, 200) +
-  xlab("") +
-  ylab("") +
-  scale_fill_viridis_c("Count", trans = "log10") +
-  thm 
+ filter(abs(rel_diff) >= 0.9 & abs(rel_diff) <= 1.1) |>
+  group_by(lake, model) |> reframe(n = n(),
+                                      mean_re = mean(abs(rel_diff))) |> View()
 
 dat_trends_diff |> filter(var_lm == "slope",
                           name %in% c("ice_sum", "strat_sum")) |>
