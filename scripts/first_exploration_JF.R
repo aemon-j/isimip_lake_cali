@@ -42,6 +42,7 @@ files <- list.files(file.path("..", "raw_data"), recursive = TRUE) |>
   filter(!str_detect(file, "desktop.ini")) |>
   filter(!grepl(pattern = "lake_characteristics.*", x = file)) |>
   filter(!grepl(pattern = "variables_description", x = file)) |>
+  filter(!grepl(pattern = "coord_area", x = file)) |>
   filter(!grepl(pattern = "performance", x = file))
 
 # read in files and combine to a single data.frame
@@ -642,6 +643,23 @@ p <- dat |> filter(name %in% c("strat_sum")) |>
         legend.key.size = unit(1.5,"line"))
 
 ggsave(file.path("..", "Output", "scatter_strat.pdf"), p, width = 13,
+       height = 11, bg = "white")
+
+## scatter plot of bot temp dur split over lakes
+p <- dat |> filter(name %in% c("bottemp_mean")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  ggplot() + geom_hex(aes(x = calibrated, y = uncalibrated)) +
+  geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
+  facet_grid(kmcluster~model, scales = "free",
+             labeller = label_wrap_gen(23)) + thm +
+  scale_fill_viridis_c("Count", trans = "log10") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.y = element_text(size = 11),
+        legend.key.size = unit(1.5,"line"))
+
+ggsave(file.path("..", "Output", "bottemp_strat.pdf"), p, width = 13,
        height = 11, bg = "white")
 
 ## list names of the lakes and models with large deviations
