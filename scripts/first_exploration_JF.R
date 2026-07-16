@@ -480,16 +480,48 @@ p <- dat |>
   mutate(diff = uncalibrated - calibrated) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   group_by(scenario, plot_name, dec) |> filter(diff <= quantile(diff, 0.975),
-                                                diff >= quantile(diff, 0.25)) |>
+                                                diff >= quantile(diff, 0.025)) |>
   ggplot() +
   geom_density_ridges(aes(x = diff, y = dec, fill = dec), alpha = 0.666) +
   facet_grid(scenario~plot_name, scales = "free", labeller = label_wrap_gen(23)) +
   scale_fill_viridis_d("") + scale_color_viridis_d("") + thm +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-        strip.text.x = element_text(size = 11)) + xlab("Decade") +
-  ylab("Difference (uncalibrated - calibrated)")
+        strip.text.x = element_text(size = 11)) + ylab("Decade") +
+  xlab("Difference (uncalibrated - calibrated)")
 
 ggsave(file.path("..", "Output", "dist_difference.pdf"), p, width = 13, height = 9)
+
+
+# difference against calibrated value
+p1 <- dat |> filter(name %in% c("strat_sum", "ice_sum")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  ggplot() +
+  geom_hex(aes(y = diff, x = calibrated)) +
+  facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 10000)) + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.y = element_text(size = 11)) +
+  xlab("") +
+  ylab("")
+
+p2 <- dat |> filter(name %in% c("surftemp_mean", "bottemp_mean")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  ggplot() +
+  geom_hex(aes(y = diff, x = calibrated)) +
+  facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 10000)) + thm +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text.y = element_text(size = 11)) + xlab("") +
+  ylab("")
+
+p <- ggarrange(p1, p2, nrow = 2, common.legend = TRUE, align = "hv")
+
+p <- annotate_figure(p, left = textGrob("Difference (uncalibrated - calibrated)", rot = 90, vjust = 1, gp = gpar(cex = 1.3)),
+                     bottom = textGrob("Calibrated", gp = gpar(cex = 1.3)))
 
 # distribution of differences
 p <- dat |>
@@ -613,7 +645,7 @@ p2 <- dat |> filter(name %in% c("strat_sum", "ice_sum")) |>
         legend.key.size = unit(1.5,"line")) +
   xlab("") + ylab("")
 
-p <- ggarrange(p1, p2, nrow = 2, common.legend = TRUE)
+p <- ggarrange(p1, p2, nrow = 2, common.legend = TRUE, align = "hv")
 
 p <- annotate_figure(p, left = textGrob("Uncalibrated", rot = 90, vjust = 1, gp = gpar(cex = 1.3)),
                 bottom = textGrob("Calibrated", gp = gpar(cex = 1.3)))
@@ -791,7 +823,7 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
               axis.ticks.y = element_blank(),
               strip.text.y = element_text(size = 11))
 
-p <- ggarrange(p1, p2, nrow = 2, common.legend = TRUE)
+p <- ggarrange(p1, p2, nrow = 2, common.legend = TRUE, align = "hv")
 
 ggsave("../Output/diff_slope_dist.pdf", p, width = 13, height = 9)
 
@@ -830,7 +862,7 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
               strip.text.y = element_text(size = 11),
               plot.margin = margin(b = 0, t = 2, r = 5, l = 0))
 
-p <- ggarrange(p1, p2, ncol = 2, common.legend = TRUE)
+p <- ggarrange(p1, p2, ncol = 2, common.legend = TRUE, align = "hv")
 p <- annotate_figure(p,
                      bottom = textGrob("relative difference (%)",
                                        gp = gpar(cex = 1.4), vjust = -0.5))
@@ -903,7 +935,8 @@ p <- ggarrange(p1 + theme(strip.background.y = element_blank(),
                           strip.text.y = element_blank(),
                           plot.margin = margin(t = 10, l = 10, b = 10, r = 0)),
                p3 + theme(plot.margin = margin(t = 10, l = 0, b = 10, r = 10)),
-               ncol = 3, common.legend = TRUE, widths = c(2, 1, 1))
+               ncol = 3, common.legend = TRUE, widths = c(2, 1, 1),
+               align = "hv")
 
 ggsave("../Output/diff_mean_h_dist.pdf", p, width = 13, height = 9)
 
