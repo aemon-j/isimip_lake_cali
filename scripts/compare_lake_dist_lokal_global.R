@@ -31,12 +31,12 @@ pa1 <- ggarrange(p1, p2, ncol = 1, align = "v", labels = c("A", "B"))
 p3 <- dat_glob |> ggplot() + geom_histogram(aes(x = area), bins = 200) +
   scale_x_continuous(transform = "log10", limits = c(0.01, 2.5e4)) +
   geom_vline(aes(xintercept = median(dat_glob$area)), col = 2, lty = 2, size = 1) +
-  xlab("Maximum surface area (km²)") + thm
+  xlab("Surface area (km²)") + thm
 p4 <- dat_lok |> ggplot() + geom_histogram(aes(x = lake.area.sqkm)) +
   scale_x_continuous(transform = "log10", limits = c(0.01, 2.5e4)) +
   geom_vline(aes(xintercept = median(dat_lok$lake.area.sqkm)), col = 2, lty = 2, size = 1) +
-  xlab("Maximum surface area (km²)") + thm
+  xlab("Surface area (km²)") + thm
 pa2 <- ggarrange(p3, p4, ncol = 1, align = "v", labels = c("C", "D"))
 
-ggarrange(pa1, pa2, align = "h")
+ggarrange(pa1, pa2, align = "hv")
 ggsave("../Output/dist_depth_area.pdf", width = 9, height = 7)

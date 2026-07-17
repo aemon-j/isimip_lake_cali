@@ -15,7 +15,7 @@ library(grid)
 thm <- theme_pubr(base_size = 17) + grids()
 
 vars_to_evaluate <- c("surftemp_mean", "bottemp_mean",
-                      #"sensheatf_mean", "latentheatf_mean",
+                      #"strat_start", "strat_end",
                       "strat_sum", "ice_sum")
 
 ##------------- read in data --------------------
@@ -469,7 +469,7 @@ dat |>
         strip.text.y = element_text(size = 11)) + ylab("") + xlab("Year")
 
 # print values for manuscript
-dat |>
+extr <- dat |>
   pivot_wider(names_from = cali, values_from = value) |>
   mutate(diff = uncalibrated - calibrated) |>
   group_by(name) |>
@@ -484,7 +484,46 @@ dat |>
           min = min(diff, na.rm = TRUE),
           max = max(diff, na.rm = TRUE))
 
+# which lakes are the extreme ones?
+dist_extr <- dat |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  mutate(diff = uncalibrated - calibrated) |> left_join(extr, by = "name") |>
+  group_by(name) |> filter(diff > q99 | diff < q1) |>
+  left_join(meta, by = c("lake" = "Lake.Short.Name")) |>
+  group_by(name, model, kmcluster) |>
+  reframe(n = n())
 
+dist_extr |> group_by(name, kmcluster) |> reframe(totn = sum(n)) |> full_join(dist_extr) |>
+  mutate(name = as.factor(name),
+         model = as.factor(model),
+         kmcluster = kmcluster) |>
+  arrange(name, model, kmcluster) |>
+  group_by(name, model, kmcluster) |>
+  reframe(n = n,
+          freq = n/unique(totn)) |>
+  group_by(name, kmcluster) |>
+  reframe(model = model,
+          n = n,
+          freq = freq,
+          label = paste0(round(freq*100, 1) ,"%"),
+          pos = 1 - (cumsum(freq)-freq/2),
+          pos_x = rep(c(1.6, 1.8), length.out=n())) |>
+  mutate(label = ifelse(label == "0%", "", label)) |>
+  left_join(vars_meta, by = c("name" = "variable")) |>
+  ggplot() + geom_col(aes(x = "", y = freq, fill = model), position = "stack") +
+  geom_text(aes(x = pos_x, y = pos, label = label, col = model),
+            size = 3.5,position = "nudge") +
+  facet_grid(plot_name~kmcluster, labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_d("Model", end = 0.95) +
+  scale_color_viridis_d("Model", end = 0.95) +
+  coord_polar("y", start = 0) +
+  theme_pubr(base_size = 16) +#theme_void(base_size = 11) +
+  labs(x = NULL, y = NULL, fill = NULL) +
+  theme(legend.position = "right",
+        legend.key.height = unit(0.3, "cm"),
+        legend.key.width = unit(0.3, "cm"),
+        axis.text = element_blank(),  # Remove axis text (labels)
+        axis.ticks = element_blank())  # Remove axis ticks
 
 # first and last decade for difference
 p <- dat |>
