@@ -22,7 +22,9 @@ folder_out = "../Output/"
 vars = list(surftemp_mean = list(longname = "Mean surface temperature",
                                  unit = "&deg;C"),
             strat_sum = list(longname = "Stratification duration",
-                             unit = "d"))
+                             unit = "d"),
+            bottemp_mean = list(longname = "Mean bottom temperature",
+                             unit = "&deg;C"))
 
 capitalisation = list("air2water-4par" = "air2water-4par",
                       "air2water-6par" = "air2water-6par",
@@ -67,6 +69,7 @@ for(i in models){
 }
 df_performance = rbindlist(lst_performance)
 df_performance = dcast(df_performance, model + lake + metric ~ cali)
+setDT(df_performance)
 
 ### Load simulated data
 for(i in names(vars)){
@@ -90,6 +93,7 @@ for(i in names(vars)){
   
   df_var = rbindlist(lst_var)
   df_var_wide = dcast(df_var, year + model + scenario + gcm + lake ~ cali)
+  setDT(df_var_wide)
   
   # Plot 1: effect of calibration
   df_plot = df_var_wide[, .(meandiff = mean(calibrated - uncalibrated)),
@@ -206,4 +210,30 @@ for(i in names(vars)){
     theme(axis.title = element_markdown())
   ggsave(paste0(folder_out, "Plot_Bar_R2slope_", i, ".", fig_type), plot = p4a,
          width = fig_width, height = fig_height)
+  
+  # Plot 5:
+  # Check if error increases with depth
+  df_char = fread("../raw_data/lake_characteristics.csv")
+  df_plot5 = merge(df_plot, df_char[, .(Lake.Short.Name, max.depth.m)],
+                   by.x = "lake", by.y = "Lake.Short.Name")
+  
+  # Place into depth categories
+  num_batches = 5L
+  cutoffs = quantile(unique(df_plot5$max.depth.m),
+                     probs = seq(0, 1, length.out = num_batches + 1),
+                     na.rm = TRUE)
+  the_labels = sapply(seq_len(num_batches), function(x) paste0(x, ": ", cutoffs[x], "-", cutoffs[x+1]))
+  df_plot5[, batch := cut(max.depth.m,
+                          breaks = cutoffs,
+                          include.lowest = T,
+                          labels = the_labels)]
+  
+  df_plot5_medians = df_plot5[, .(median = median(abs(meandiff))), by = .(batch, scenario)]
+  setorder(df_plot5_medians, scenario, batch)
+  
+  ggplot(df_plot5) +
+    geom_violin(aes(batch, abs(meandiff))) +
+    geom_point(data = df_plot5_medians, aes(batch, median)) +
+    theme_light() +
+    facet_wrap(~ scenario)
 }
