@@ -122,8 +122,7 @@ dat_trends_diff <- dat_trend |>
   pivot_wider(names_from = cali, values_from = value,
               id_cols = c(model, scenario, lake, gcm, name, var_lm)) |>
   mutate(diff = `uncalibrated` - calibrated,
-         rel_diff = diff/abs(calibrated)) |>
-  select(- calibrated, -`uncalibrated`)
+         rel_diff = diff/abs(calibrated))
 
 
 # calculate comparison metrics R, bias, and variance of difference
@@ -490,18 +489,22 @@ dist_extr <- dat |>
   mutate(diff = uncalibrated - calibrated) |> left_join(extr, by = "name") |>
   group_by(name) |> filter(diff > q99 | diff < q1) |>
   left_join(meta, by = c("lake" = "Lake.Short.Name")) |>
-  group_by(name, model, kmcluster) |>
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth larger 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
+                           max.depth.m < 20 ~ "depth above 20 m")) |>
+  group_by(name, model, scenario) |>
   reframe(n = n())
 
-dist_extr |> group_by(name, kmcluster) |> reframe(totn = sum(n)) |> full_join(dist_extr) |>
-  mutate(name = as.factor(name),
-         model = as.factor(model),
-         kmcluster = kmcluster) |>
-  arrange(name, model, kmcluster) |>
-  group_by(name, model, kmcluster) |>
+dist_extr |> group_by(name, scenario) |>
+  reframe(totn = sum(n)) |> full_join(dist_extr) |>
+  mutate(name = factor(name),
+         model = factor(model),
+         scenario = scenario) |>
+  arrange(name, model, scenario) |>
+  group_by(name, model, scenario) |>
   reframe(n = n,
           freq = n/unique(totn)) |>
-  group_by(name, kmcluster) |>
+  group_by(name, scenario) |>
   reframe(model = model,
           n = n,
           freq = freq,
@@ -512,10 +515,10 @@ dist_extr |> group_by(name, kmcluster) |> reframe(totn = sum(n)) |> full_join(di
   left_join(vars_meta, by = c("name" = "variable")) |>
   ggplot() + geom_col(aes(x = "", y = freq, fill = model), position = "stack") +
   geom_text(aes(x = pos_x, y = pos, label = label, col = model),
-            size = 3.5,position = "nudge") +
-  facet_grid(plot_name~kmcluster, labeller = label_wrap_gen(23)) +
-  scale_fill_viridis_d("Model", end = 0.95) +
-  scale_color_viridis_d("Model", end = 0.95) +
+            size = 4,position = "nudge") +
+  facet_grid(plot_name~scenario, labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_d("Model", end = 1, option = "H") +
+  scale_color_viridis_d("Model", end = 1, option = "H") +
   coord_polar("y", start = 0) +
   theme_pubr(base_size = 16) +#theme_void(base_size = 11) +
   labs(x = NULL, y = NULL, fill = NULL) +
@@ -524,6 +527,8 @@ dist_extr |> group_by(name, kmcluster) |> reframe(totn = sum(n)) |> full_join(di
         legend.key.width = unit(0.3, "cm"),
         axis.text = element_blank(),  # Remove axis text (labels)
         axis.ticks = element_blank())  # Remove axis ticks
+
+ggsave("../Output/dist_models_extreme.pdf", width = 13, height = 11)
 
 # first and last decade for difference
 p <- dat |>
@@ -724,9 +729,12 @@ p <- dat |> filter(name %in% c("strat_sum")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth larger 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
+                           max.depth.m < 20 ~ "depth above 20 m")) |>
   ggplot() + geom_hex(aes(x = calibrated, y = uncalibrated)) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
-  facet_grid(kmcluster~model, scales = "free",
+  facet_grid(dlake~model, scales = "free",
              labeller = label_wrap_gen(23)) + thm +
   scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
@@ -734,16 +742,19 @@ p <- dat |> filter(name %in% c("strat_sum")) |>
         legend.key.size = unit(1.5,"line"))
 
 ggsave(file.path("..", "Output", "scatter_strat.pdf"), p, width = 13,
-       height = 11, bg = "white")
+       height = 7, bg = "white")
 
 ## scatter plot of bot temp split over lakes
 p <- dat |> filter(name %in% c("bottemp_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth larger 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
+                           max.depth.m < 20 ~ "depth above 20 m")) |>
   ggplot() + geom_hex(aes(x = calibrated, y = uncalibrated)) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
-  facet_grid(kmcluster~model, scales = "free",
+  facet_grid(dlake~model, scales = "free",
              labeller = label_wrap_gen(23)) + thm +
   scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
@@ -751,7 +762,7 @@ p <- dat |> filter(name %in% c("bottemp_mean")) |>
         legend.key.size = unit(1.5,"line"))
 
 ggsave(file.path("..", "Output", "scatter_bottemp.pdf"), p, width = 13,
-       height = 11, bg = "white")
+       height = 7, bg = "white")
 
 ## list names of the lakes and models with large deviations
 dat |> filter(name == "strat_sum") |>
@@ -868,13 +879,16 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
                                name %in% c("bottemp_mean", "surftemp_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
-  ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster,
-                                     height = after_stat(density), fill = kmcluster),
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "larger 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "between 20 and 45 m",
+                           max.depth.m < 20 ~ "above 20 m")) |>
+  ggplot() + geom_density_ridges(aes(x = diff, y = dlake,
+                                     height = after_stat(density), fill = dlake),
                                  stat = "density") +
   facet_grid(plot_name~scenario, labeller = label_wrap_gen(23)) +
-  theme_pubr(base_size = 16) + grids() + xlim(-0.035, 0.03) +
+  theme_pubr(base_size = 16) + grids() + xlim(-0.035, 0.04) +
   xlab("Temp. slope difference (°C/a)") +
-  scale_fill_viridis_d("Lake type") + ylab("") +
+  scale_fill_viridis_d("Depth", direction = -1) + ylab("") +
   thm + theme(axis.text.y = element_blank(),
               axis.ticks.y = element_blank(),
               strip.text.y = element_text(size = 11))
@@ -884,14 +898,17 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
                                name %in% c("ice_sum", "strat_sum")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
-  ggplot() + geom_density_ridges(aes(x = diff, y = kmcluster,
-                                     height = after_stat(density), fill = kmcluster),
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "larger 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "between 20 and 45 m",
+                           max.depth.m < 20 ~ "above 20 m")) |>
+  ggplot() + geom_density_ridges(aes(x = diff, y = dlake,
+                                     height = after_stat(density), fill = dlake),
                                  stat = "density") +
   facet_grid(plot_name~scenario, scales = "free",
              labeller = label_wrap_gen(23)) +
   theme_pubr(base_size = 16) + grids() + xlim(-1.75, 1.) +
   xlab("Dur. slope difference (d/a)") +
-  scale_fill_viridis_d("Lake type") + ylab("") +
+  scale_fill_viridis_d("Depth", direction = -1) + ylab("") +
   thm + theme(axis.text.y = element_blank(),
               axis.ticks.y = element_blank(),
               strip.text.y = element_text(size = 11))
@@ -1068,8 +1085,12 @@ p <- ggarrange(p1 + theme(strip.background.y = element_blank(),
 
 ggsave("../Output/diff_mean_h_dist.pdf", p, width = 13, height = 9)
 
-
-
+# scatter plot of simulated trends
+dat_trends_diff |> filter(var_lm == "slope") |>
+  ggplot() + geom_point( aes(x = calibrated, y = uncalibrated)) +
+  facet_wrap(name~scenario, scale = "free") +
+  geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
+  thm
 # variance decompositioning for linear slope
 var_dec_lm$group <- factor(var_dec_lm$group,
                              levels = unique(var_dec_lm$group),
