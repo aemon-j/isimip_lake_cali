@@ -294,7 +294,10 @@ dat_diff_perf |> ggplot() + geom_point(aes(x = mean, y = impr)) +
 p <- dat |> filter(scenario == "SSP3-7.0", year >= 2017) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  group_by(year, kmcluster, scenario, plot_name, cali) |>
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth deeper 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
+                           max.depth.m < 20 ~ "depth above 20 m")) |>
+  group_by(year, dlake, scenario, plot_name, cali) |>
   reframe(mean = mean(value, na.rm = TRUE),
           median = median(value, na.rm = TRUE),
           q5 = quantile(value, 0.05, na.rm = TRUE),
@@ -308,7 +311,7 @@ p <- dat |> filter(scenario == "SSP3-7.0", year >= 2017) |>
   #geom_ribbon(aes(x = year, ymin = mean - se, ymax = mean + se, fill = cali), alpha = 0.333) +
   geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = cali), alpha = 0.333) +
   geom_line(aes(x = year, y = median, col = cali), lwd = 1) +
-  facet_grid(plot_name~kmcluster, scales = "free", labeller = label_wrap_gen(21)) + thm +
+  facet_grid(plot_name~dlake, scales = "free", labeller = label_wrap_gen(21)) + thm +
   scale_fill_viridis_d("Calibrated", end = 0.95) +
   scale_color_viridis_d("Calibrated", end = 0.95) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
@@ -333,8 +336,9 @@ p <- dat |> filter(scenario == "SSP3-7.0", year >= 2017) |>
           max = max(value, na.rm = TRUE),
           se = sd(value, na.rm = TRUE)/sqrt(n())) |>
   ggplot() +
-  #geom_ribbon(aes(x = year, ymin = mean - se, ymax = mean + se, fill = cali), alpha = 0.333) +
-  geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = cali), alpha = 0.333) +
+  #geom_ribbon(aes(x = year, ymin = min, ymax = max, fill = cali), alpha = 0.15) +
+  #geom_ribbon(aes(x = year, ymin = q5, ymax = q95, fill = cali), alpha = 0.2) +
+  geom_ribbon(aes(x = year, ymin = q25, ymax = q75, fill = cali), alpha = 0.25) +
   geom_line(aes(x = year, y = median, col = cali), lwd = 1) +
   facet_grid(plot_name~., scales = "free", labeller = label_wrap_gen(21)) + thm +
   scale_fill_viridis_d("Calibrated", end = 0.95) +
@@ -343,6 +347,20 @@ p <- dat |> filter(scenario == "SSP3-7.0", year >= 2017) |>
   xlab("Year") + ylab("")
 
 ggsave(file.path("..", "Output", "ts_split_ssp370.pdf"), p, width = 9, height = 10)
+
+## alternatively plot distributions for each 10 years
+dat |> filter(scenario == "SSP3-7.0") |>
+  left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  mutate(dec = as.factor(paste0(floor(year/5)*5))) |>
+  ggplot() +
+  geom_density_ridges(aes(y = dec, x = value, fill = cali,
+                          col = cali, height = after_stat(density)),
+                      alpha = 0.4, stat = "density") +
+  coord_flip() +
+  facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(21)) + thm +
+  scale_fill_viridis_d("Calibrated", end = 0.95) +
+  scale_color_viridis_d("Calibrated", end = 0.95) +
+  xlab("") + ylab("")
 
 ## plot raw data for surface temp
 p <- dat |> filter(name == "surftemp_mean") |>
@@ -418,12 +436,11 @@ p <- dat |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() +
   geom_density_ridges(aes(x = value, y = dec, fill = cali,
+                          col = cali,
                           height = after_stat(density)),
                       alpha = 0.5, stat = "density") +
   facet_grid(scenario~plot_name, scales = "free", labeller = label_wrap_gen(23)) +
   scale_fill_viridis_d("") + scale_color_viridis_d("") + thm +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-        strip.text.x = element_text(size = 11)) + ylab("Decade") + xlab("Value") +
   xlim(0, NA)
 
 ggsave(file.path("..", "Output", "dist_all_vars.pdf"), p, width = 13, height = 9)
@@ -446,7 +463,8 @@ p <- dat |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   ggplot() +
   #geom_ribbon(aes(x = year, ymin = min, ymax = max), alpha = 0.35) +
-  geom_ribbon(aes(x = year, ymin = q1, ymax = q99), alpha = 0.35) +
+  geom_ribbon(aes(x = year, ymin = q1, ymax = q99), alpha = 0.25) +
+  geom_ribbon(aes(x = year, ymin = q5, ymax = q95), alpha = 0.3) +
   geom_ribbon(aes(x = year, ymin = q25, ymax = q75), alpha = 0.35) +
   geom_line(aes(x = year, y = median), lwd = 1.23) +
   facet_grid(plot_name~scenario, scales = "free", labeller = label_wrap_gen(23)) +
@@ -489,7 +507,7 @@ dist_extr <- dat |>
   mutate(diff = uncalibrated - calibrated) |> left_join(extr, by = "name") |>
   group_by(name) |> filter(diff > q99 | diff < q1) |>
   left_join(meta, by = c("lake" = "Lake.Short.Name")) |>
-  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth larger 45 m",
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth deeper 45 m",
                            max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
                            max.depth.m < 20 ~ "depth above 20 m")) |>
   group_by(name, model, scenario) |>
@@ -724,23 +742,34 @@ dat |>
   reframe(R = cor(calibrated, uncalibrated),
           bias = mean(uncalibrated - calibrated, na.rm = TRUE))
 
+# R and bias with depth classes
+dat |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth deeper 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
+                           max.depth.m < 20 ~ "depth above 20 m")) |>
+  pivot_wider(names_from = cali, values_from = value) |>
+  group_by(name, scenario, dlake) |>
+  reframe(R = cor(calibrated, uncalibrated),
+          bias = mean(uncalibrated - calibrated, na.rm = TRUE))
+
+
 ## scatter plot of strat dur split over lakes
 p <- dat |> filter(name %in% c("strat_sum")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth larger 45 m",
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth deeper 45 m",
                            max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
                            max.depth.m < 20 ~ "depth above 20 m")) |>
   ggplot() + geom_hex(aes(x = calibrated, y = uncalibrated)) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
   facet_grid(dlake~model, scales = "free",
-             labeller = label_wrap_gen(23)) + thm +
+             labeller = label_wrap_gen(19)) + thm +
   scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
         strip.text.y = element_text(size = 11),
         legend.key.size = unit(1.5,"line"))
-
 ggsave(file.path("..", "Output", "scatter_strat.pdf"), p, width = 13,
        height = 7, bg = "white")
 
@@ -749,13 +778,13 @@ p <- dat |> filter(name %in% c("bottemp_mean")) |>
   pivot_wider(names_from = cali, values_from = value) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
-  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth larger 45 m",
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth deeper 45 m",
                            max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
                            max.depth.m < 20 ~ "depth above 20 m")) |>
   ggplot() + geom_hex(aes(x = calibrated, y = uncalibrated)) +
   geom_abline(aes(slope = 1, intercept = 0), lty = "dashed", size = 1.5, col = "grey") +
   facet_grid(dlake~model, scales = "free",
-             labeller = label_wrap_gen(23)) + thm +
+             labeller = label_wrap_gen(19)) + thm +
   scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
         strip.text.y = element_text(size = 11),
@@ -763,6 +792,22 @@ p <- dat |> filter(name %in% c("bottemp_mean")) |>
 
 ggsave(file.path("..", "Output", "scatter_bottemp.pdf"), p, width = 13,
        height = 7, bg = "white")
+
+
+dat |> filter(name %in% c("bottemp_mean", "strat_sum")) |>
+  pivot_wider(names_from = name, values_from = value) |>
+  filter(!is.na(bottemp_mean)) |>
+  left_join(meta, by = c(lake = "Lake.Short.Name")) |>
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "depth deeper 45 m",
+                           max.depth.m >=20 & max.depth.m < 45 ~ "depth between 20 and 45 m",
+                           max.depth.m < 20 ~ "depth above 20 m")) |>
+  ggplot() + geom_hex(aes(y = bottemp_mean, x = strat_sum)) +
+  geom_smooth(aes(y = bottemp_mean, x = strat_sum), method = "lm") +
+  facet_grid(dlake~cali, scales = "free",
+             labeller = label_wrap_gen(23)) +
+  scale_fill_viridis_c("Count", trans = "log10", breaks = c(1, 100, 5000)) +
+  thm + xlab("Stratification duration (d)") +
+  ylab("Mean annual bottom water temperature (°C)")
 
 ## list names of the lakes and models with large deviations
 dat |> filter(name == "strat_sum") |>
@@ -879,7 +924,7 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
                                name %in% c("bottemp_mean", "surftemp_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
-  mutate(dlake = case_when(max.depth.m >= 45 ~ "larger 45 m",
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "deeper 45 m",
                            max.depth.m >=20 & max.depth.m < 45 ~ "between 20 and 45 m",
                            max.depth.m < 20 ~ "above 20 m")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = dlake,
@@ -898,7 +943,7 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
                                name %in% c("ice_sum", "strat_sum")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
-  mutate(dlake = case_when(max.depth.m >= 45 ~ "larger 45 m",
+  mutate(dlake = case_when(max.depth.m >= 45 ~ "deeper 45 m",
                            max.depth.m >=20 & max.depth.m < 45 ~ "between 20 and 45 m",
                            max.depth.m < 20 ~ "above 20 m")) |>
   ggplot() + geom_density_ridges(aes(x = diff, y = dlake,
@@ -925,6 +970,7 @@ p1 <- dat_trends_diff |> filter(var_lm == "slope",
                                 name %in% c("bottemp_mean", "surftemp_mean")) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  mutate(plot_name = str_remove(plot_name, "\\(.*\\)")) |>
   ggplot() + geom_density_ridges(aes(x = rel_diff*100, y = scenario,
                                      height = after_stat(density), fill = scenario),
                                  stat = "density") +
@@ -943,6 +989,7 @@ p2 <- dat_trends_diff |> filter(var_lm == "slope",
   mutate(rel_diff = ifelse(is.finite(rel_diff), rel_diff, NA)) |>
   left_join(meta, by = c(lake = "Lake.Short.Name")) |>
   left_join(vars_meta[, c(1, 4)], by = c(name = "variable")) |>
+  mutate(plot_name = str_remove(plot_name, "\\(.*\\)")) |>
   ggplot() + geom_density_ridges(aes(x = rel_diff*100, y = scenario,
                                      height = after_stat(density), fill = scenario),
                                  stat = "density") +
